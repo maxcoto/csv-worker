@@ -1,0 +1,619 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+
+/* include utility classes in streamdown */
+@source "../node_modules/streamdown/dist/index.js";
+
+/* custom variant for setting dark mode programmatically */
+@custom-variant dark (&:is(.dark, .dark *));
+
+/* include plugins */
+@plugin "tailwindcss-animate";
+@plugin "@tailwindcss/typography";
+
+/* define design tokens (light mode) */
+:root {
+  --background: hsl(0 0% 100%);
+  --matrix-green: hsl(120 100% 50%);
+  --matrix-green-rgb: 0, 255, 65;
+  --foreground: hsl(240 10% 3.9%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(240 10% 3.9%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(240 10% 3.9%);
+  --primary: hsl(240 5.9% 10%);
+  --primary-foreground: hsl(0 0% 98%);
+  --secondary: hsl(240 4.8% 95.9%);
+  --secondary-foreground: hsl(240 5.9% 10%);
+  --muted: hsl(240 4.8% 95.9%);
+  --muted-foreground: hsl(240 3.8% 46.1%);
+  --accent: hsl(240 4.8% 95.9%);
+  --accent-foreground: hsl(240 5.9% 10%);
+  --destructive: hsl(0 84.2% 60.2%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(240 5.9% 90%);
+  --input: hsl(240 5.9% 90%);
+  --ring: hsl(240 10% 3.9%);
+  --chart-1: hsl(12 76% 61%);
+  --chart-2: hsl(173 58% 39%);
+  --chart-3: hsl(197 37% 24%);
+  --chart-4: hsl(43 74% 66%);
+  --chart-5: hsl(27 87% 67%);
+  --sidebar-background: hsl(0 0% 98%);
+  --sidebar-foreground: hsl(240 5.3% 26.1%);
+  --sidebar-primary: hsl(240 5.9% 10%);
+  --sidebar-primary-foreground: hsl(0 0% 98%);
+  --sidebar-accent: hsl(240 4.8% 95.9%);
+  --sidebar-accent-foreground: hsl(240 5.9% 10%);
+  --sidebar-border: hsl(220 13% 91%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  /* border radius unit */
+  --radius: 0.5rem;
+  --sidebar: hsl(0 0% 98%);
+}
+
+/* define design tokens (dark mode) */
+.dark {
+  --background: hsl(0 0% 0%);
+  --matrix-green: hsl(120 100% 50%);
+  --matrix-green-rgb: 0, 255, 65;
+  --foreground: hsl(0 0% 100%);
+  --card: hsl(0 0% 0%);
+  --card-foreground: hsl(0 0% 100%);
+  --popover: hsl(0 0% 0%);
+  --popover-foreground: hsl(0 0% 100%);
+  --primary: hsl(0 0% 98%);
+  --primary-foreground: hsl(240 5.9% 10%);
+  --secondary: hsl(240 3.7% 15.9%);
+  --secondary-foreground: hsl(0 0% 98%);
+  --muted: hsl(240 3.7% 15.9%);
+  --muted-foreground: hsl(240 5% 64.9%);
+  --accent: hsl(240 3.7% 15.9%);
+  --accent-foreground: hsl(0 0% 98%);
+  --destructive: hsl(0 62.8% 30.6%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(240 3.7% 15.9%);
+  --input: hsl(240 3.7% 15.9%);
+  --ring: hsl(240 4.9% 83.9%);
+  --chart-1: hsl(220 70% 50%);
+  --chart-2: hsl(160 60% 45%);
+  --chart-3: hsl(30 80% 55%);
+  --chart-4: hsl(280 65% 60%);
+  --chart-5: hsl(340 75% 55%);
+  --sidebar-background: hsl(0 0% 0%);
+  --sidebar-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-primary: hsl(224.3 76.3% 48%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(240 3.7% 15.9%);
+  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-border: hsl(240 3.7% 15.9%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --sidebar: hsl(240 5.9% 10%);
+}
+
+/* define theme */
+@theme {
+  --font-sans: "Monaco", "Menlo", "Consolas", "Courier New", monospace;
+  --font-mono: "Monaco", "Menlo", "Consolas", "Courier New", monospace;
+
+  --breakpoint-toast-mobile: 600px;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility text-balance {
+  text-wrap: balance;
+}
+
+@utility -webkit-overflow-scrolling-touch {
+  -webkit-overflow-scrolling: touch;
+}
+
+@utility touch-pan-y {
+  touch-action: pan-y;
+}
+
+@utility overscroll-behavior-contain {
+  overscroll-behavior: contain;
+}
+
+@layer utilities {
+  :root {
+    --foreground-rgb: 0, 0, 0;
+    --background-start-rgb: 214, 219, 220;
+    --background-end-rgb: 255, 255, 255;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --foreground-rgb: 255, 255, 255;
+      --background-start-rgb: 0, 0, 0;
+      --background-end-rgb: 0, 0, 0;
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    font-family: "Monaco", "Menlo", "Consolas", "Courier New", monospace;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Monaco", "Menlo", "Consolas", "Courier New", monospace;
+    overflow: hidden;
+    max-height: 100dvh;
+    position: relative;
+  }
+
+  html {
+    overflow: hidden;
+    height: 100dvh;
+  }
+}
+
+.skeleton {
+  * {
+    pointer-events: none !important;
+  }
+
+  *[class^="text-"] {
+    color: transparent;
+    @apply rounded-md bg-foreground/20 select-none animate-pulse;
+  }
+
+  .skeleton-bg {
+    @apply bg-foreground/10;
+  }
+
+  .skeleton-div {
+    @apply bg-foreground/20 animate-pulse;
+  }
+}
+
+.ProseMirror {
+  outline: none;
+}
+
+.cm-editor,
+.cm-gutters {
+  @apply bg-background! dark:bg-zinc-800! outline-hidden! selection:bg-zinc-900!;
+}
+
+.ͼo.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.ͼo.cm-selectionBackground,
+.ͼo.cm-content::selection {
+  @apply bg-zinc-200! dark:bg-zinc-900!;
+}
+
+.cm-activeLine,
+.cm-activeLineGutter {
+  @apply bg-transparent!;
+}
+
+.cm-activeLine {
+  @apply rounded-r-sm!;
+}
+
+.cm-lineNumbers {
+  @apply min-w-7;
+}
+
+.cm-foldGutter {
+  @apply min-w-3;
+}
+
+.cm-lineNumbers .cm-activeLineGutter {
+  @apply rounded-l-sm!;
+}
+
+.suggestion-highlight {
+  @apply bg-blue-200 hover:bg-blue-300 dark:hover:bg-blue-400/50 dark:text-blue-50 dark:bg-blue-500/40;
+}
+
+/* Chat markdown styling — scoped to assistant messages */
+.prose-chat {
+  font-family: "Monaco", "Menlo", "Consolas", "Courier New", monospace;
+  line-height: 1.6;
+
+  p {
+    margin: 0.25em 0;
+  }
+
+  p:first-child {
+    margin-top: 0;
+  }
+
+  p:last-child {
+    margin-bottom: 0;
+  }
+
+  strong {
+    font-weight: 700;
+  }
+
+  em {
+    font-style: italic;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 700;
+    margin: 0.75em 0 0.25em;
+    line-height: 1.3;
+  }
+
+  h1 {
+    font-size: 1.15em;
+  }
+
+  h2 {
+    font-size: 1.1em;
+  }
+
+  h3 {
+    font-size: 1.05em;
+  }
+
+  ul,
+  ol {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+  }
+
+  ul {
+    list-style-type: disc;
+  }
+
+  ol {
+    list-style-type: decimal;
+  }
+
+  li {
+    margin: 0.15em 0;
+  }
+
+  li > p {
+    margin: 0;
+  }
+
+  code {
+    font-family: "Monaco", "Menlo", "Consolas", "Courier New", monospace;
+    font-size: 0.9em;
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 3px;
+    padding: 0.1em 0.3em;
+  }
+
+  .dark & code {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  pre {
+    margin: 0.5em 0;
+    padding: 0.75em;
+    border-radius: 0.5em;
+    background: rgba(0, 0, 0, 0.04);
+    overflow-x: auto;
+  }
+
+  .dark & pre {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  pre code {
+    background: none;
+    padding: 0;
+  }
+
+  blockquote {
+    margin: 0.5em 0;
+    padding-left: 0.75em;
+    border-left: 3px solid rgba(0, 0, 0, 0.15);
+    font-style: italic;
+  }
+
+  .dark & blockquote {
+    border-left-color: rgba(255, 255, 255, 0.2);
+  }
+
+  /* KaTeX inline math — code-snippet style */
+  .katex {
+    font-size: 1.15em;
+    color: var(--foreground);
+    background: rgba(var(--matrix-green-rgb), 0.08);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    border: 1px solid rgba(var(--matrix-green-rgb), 0.2);
+  }
+
+  .dark & .katex {
+    background: rgba(var(--matrix-green-rgb), 0.12);
+    border-color: rgba(var(--matrix-green-rgb), 0.25);
+  }
+
+  /* KaTeX in user messages (same green as bubble, black text for contrast) - maximum specificity */
+  .user-message-bubble .katex,
+  .user-message-bubble .prose-chat .katex,
+  .user-message-bubble p .katex,
+  .user-message-bubble span .katex,
+  div.user-message-bubble .katex,
+  div.user-message-bubble .prose-chat .katex,
+  div.user-message-bubble p .katex {
+    color: black !important;
+    background: rgba(0, 255, 65, 0.8) !important;
+    background-color: rgba(0, 255, 65, 0.8) !important;
+    border-color: rgba(0, 255, 65, 1) !important;
+    border: 1px solid rgba(0, 255, 65, 1) !important;
+  }
+
+  /* Target all KaTeX internal elements - force background */
+  .user-message-bubble .katex .katex-html,
+  .user-message-bubble .prose-chat .katex .katex-html,
+  .user-message-bubble .katex .katex-mathml,
+  .user-message-bubble .prose-chat .katex .katex-mathml,
+  .user-message-bubble .katex > span,
+  .user-message-bubble .prose-chat .katex > span,
+  div.user-message-bubble .katex .katex-html,
+  div.user-message-bubble .katex .katex-mathml,
+  .user-message-bubble .katex[style*="background"] {
+    background-color: rgba(0, 255, 65, 0.8) !important;
+    background: rgba(0, 255, 65, 0.8) !important;
+  }
+
+  /* Also target the root KaTeX element wrapper */
+  .user-message-bubble .katex-display .katex,
+  div.user-message-bubble .katex-display .katex {
+    background-color: rgba(0, 255, 65, 0.7) !important;
+    background: rgba(0, 255, 65, 0.7) !important;
+  }
+
+  .user-message-bubble .katex-display,
+  .user-message-bubble .prose-chat .katex-display {
+    background: rgba(0, 255, 65, 0.3) !important;
+    border-left-color: rgba(0, 255, 65, 0.6) !important;
+  }
+
+  .user-message-bubble .katex-display > .katex,
+  .user-message-bubble .prose-chat .katex-display > .katex {
+    background: transparent !important;
+  }
+
+  /* Larger fractions for polynomial divisions */
+  .katex .frac-line {
+    min-height: 0.08em;
+    border-bottom-width: 0.08em;
+  }
+
+  .katex .frac {
+    font-size: 1.5em;
+  }
+
+  /* Make fractions in display mode even larger */
+  .katex-display .frac {
+    font-size: 1.8em;
+  }
+
+  /* KaTeX block/display math */
+  .katex-display {
+    margin: 0.75em 0;
+    padding: 0.75em 1em;
+    overflow-x: auto;
+    background: rgba(var(--matrix-green-rgb), 0.05);
+    border-left: 3px solid rgba(var(--matrix-green-rgb), 0.4);
+    border-radius: 0 0.5em 0.5em 0;
+  }
+
+  .dark & .katex-display {
+    background: rgba(var(--matrix-green-rgb), 0.08);
+    border-left-color: rgba(var(--matrix-green-rgb), 0.5);
+  }
+
+  /* Reset the inline snippet style inside display blocks */
+  .katex-display > .katex {
+    font-size: 1.2em;
+    background: none;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+  }
+
+  hr {
+    margin: 0.75em 0;
+    border-color: rgba(0, 0, 0, 0.1);
+  }
+
+  .dark & hr {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  a {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+}
+
+/* minimal scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: --alpha(var(--muted-foreground) / 0.5);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* firefox scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+@theme inline {
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* User message bubble: same green as KaTeX inside it */
+@layer utilities {
+  .user-message-bubble-bg {
+    background: rgba(var(--matrix-green-rgb), 0.22);
+  }
+}
+
+/* Matrix green utility classes */
+@layer utilities {
+  .bg-matrix-green {
+    background-color: hsl(120 100% 50%);
+  }
+  .bg-matrix-green-subtle {
+    background-color: rgba(0, 255, 65, 0.7);
+  }
+  .bg-matrix-green-subtle-hover,
+  .hover\:bg-matrix-green-subtle-hover:hover {
+    background-color: rgba(0, 255, 65, 0.85);
+  }
+  .bg-matrix-green-100 {
+    background-color: rgba(0, 255, 65, 0.1);
+  }
+  .bg-matrix-green-900 {
+    background-color: rgba(0, 255, 65, 0.3);
+  }
+  .bg-matrix-green-600 {
+    background-color: hsl(120 100% 40%);
+  }
+  .bg-matrix-green-700 {
+    background-color: hsl(120 100% 35%);
+  }
+  .bg-matrix-green-50 {
+    background-color: rgba(0, 255, 65, 0.05);
+  }
+  .bg-matrix-green-950 {
+    background-color: rgba(0, 255, 65, 0.2);
+  }
+  .text-matrix-green {
+    color: hsl(120 100% 50%);
+  }
+  .text-matrix-green-800 {
+    color: hsl(120 100% 30%);
+  }
+  .text-matrix-green-300 {
+    color: hsl(120 100% 60%);
+  }
+  .text-matrix-green-400 {
+    color: hsl(120 100% 55%);
+  }
+  .text-matrix-green-700 {
+    color: hsl(120 100% 35%);
+  }
+  .border-matrix-green {
+    border-color: hsl(120 100% 50%);
+  }
+  .border-matrix-green-500 {
+    border-color: hsl(120 100% 45%);
+  }
+  .ring-matrix-green {
+    --tw-ring-color: hsl(120 100% 50%);
+  }
+  .ring-matrix-green-500 {
+    --tw-ring-color: hsl(120 100% 45%);
+  }
+  .hover\:bg-matrix-green-700:hover {
+    background-color: hsl(120 100% 35%);
+  }
+}
