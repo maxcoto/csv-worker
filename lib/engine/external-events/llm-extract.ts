@@ -100,16 +100,18 @@ export async function extractEventsFromArticle(
   const source = hostnameFromUrl(sourceUrl);
   const rows: ExternalEventRow[] = [];
   for (const ev of validated.data.events) {
-    if (ev.confidence < 0.6) {
-      continue;
-    }
+    const lowConfidence = ev.confidence < 0.6;
     rows.push({
       domain,
       eventType: ev.event_type,
       eventTs: ev.event_ts,
       source,
       sourceUrl,
-      payloadJson: { summary: ev.summary, confidence: ev.confidence },
+      payloadJson: {
+        summary: ev.summary,
+        confidence: ev.confidence,
+        ...(lowConfidence && { low_confidence: true }),
+      },
       confidence: ev.confidence,
     });
   }

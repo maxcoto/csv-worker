@@ -84,7 +84,26 @@ export async function runExternalEventsEnrichment(
       try {
         searchRows = await runSearchAndStore(
           domain,
-          queries.map((q) => ({ query: q.query, category: q.category }))
+          queries.map((q) => ({ query: q.query, category: q.category })),
+          {
+            onQueryDone: async (category, query, rows) => {
+              await appendRunLog(
+                runId,
+                "info",
+                `Search query: ${category}`,
+                {
+                  domain,
+                  step: "external_events_search",
+                  detail: {
+                    query,
+                    category,
+                    resultCount: rows.length,
+                    rows,
+                  },
+                }
+              );
+            },
+          }
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -121,7 +140,23 @@ export async function runExternalEventsEnrichment(
       const articles = await fetchAndStoreArticles(
         domain,
         urls,
-        MAX_ARTICLES_PER_DOMAIN
+        MAX_ARTICLES_PER_DOMAIN,
+        {
+          onUrlResult: (url, status, reason, articleTextLength) => {
+            void appendRunLog(runId, "info", "Article fetch", {
+              domain,
+              step: "external_events_fetch",
+              detail: {
+                url,
+                status,
+                ...(reason !== undefined && { reason }),
+                ...(articleTextLength !== undefined && {
+                  articleTextLength,
+                }),
+              },
+            });
+          },
+        }
       );
       summary.articlesFetched += articles.length;
       if (urls.length > articles.length) {
@@ -143,6 +178,15 @@ export async function runExternalEventsEnrichment(
           .where(eq(runs.id, runId));
 
         try {
+          await appendRunLog(runId, "info", "LLM extract input", {
+            domain,
+            step: "external_events_extract",
+            detail: {
+              source_url: art.url,
+              published_date: art.publishedDate,
+              articleTextLength: art.articleText.length,
+            },
+          });
           const eventRows = await extractEventsFromArticle(
             domain,
             art.articleText,
@@ -150,7 +194,35 @@ export async function runExternalEventsEnrichment(
             art.publishedDate,
             eventPromptId
           );
-          const inserted = await dedupeAndStore(eventRows);
+          await appendRunLog(runId, "info", "LLM extract output", {
+            domain,
+            step: "external_events_extract",
+            detail: {
+              events: eventRows.map((r) => ({
+                event_type: r.eventType,
+                event_ts: r.eventTs,
+                confidence: r.confidence,
+                summary: (r.payloadJson as { summary?: string })?.summary,
+              })),
+              url: art.url,
+            },
+          });
+          const inserted = await dedupeAndStore(eventRows, {
+            onSkip: (d, eventType, eventTs, reason) => {
+              void appendRunLog(runId, "info", "Dedupe skip", {
+                domain: d,
+                step: "external_events_dedupe_store",
+                detail: { event_type: eventType, event_ts: eventTs, reason },
+              });
+            },
+            onInsert: (d, eventType, eventTs) => {
+              void appendRunLog(runId, "info", "Dedupe insert", {
+                domain: d,
+                step: "external_events_dedupe_store",
+                detail: { event_type: eventType, event_ts: eventTs },
+              });
+            },
+          });
           summary.eventsStored += inserted;
           await appendRunLog(runId, "info", `Article extracted: ${art.url}`, {
             domain,

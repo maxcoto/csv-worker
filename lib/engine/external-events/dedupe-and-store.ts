@@ -14,17 +14,39 @@ function parseDate(s: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function normalizeSummary(payload: Record<string, unknown> | null): string {
+  const s = payload && typeof payload.summary === "string" ? payload.summary : "";
+  return s.toLowerCase().trim();
+}
+
+/** Simple similarity: exact match or one normalized summary contains the other. */
+function isSimilarSummary(
+  newSummary: string,
+  existingSummary: string
+): boolean {
+  if (newSummary === existingSummary) {
+    return true;
+  }
+  if (newSummary.length >= 20 && existingSummary.length >= 20) {
+    return (
+      newSummary.includes(existingSummary) || existingSummary.includes(newSummary)
+    );
+  }
+  return false;
+}
+
 /**
- * Check if an event with same domain, event_type, and event_ts within ±3 days already exists.
+ * Find existing events in (domain, event_type, event_ts ± 3 days). Returns skip reason or null if insert allowed.
  */
-async function isDuplicate(
+async function getSkipReason(
   domain: string,
   eventType: string,
-  eventTs: string
-): Promise<boolean> {
+  eventTs: string,
+  payloadJson: Record<string, unknown>
+): Promise<"duplicate" | "similar_payload" | null> {
   const d = parseDate(eventTs);
   if (!d) {
-    return false;
+    return null;
   }
   const low = new Date(d);
   low.setDate(low.getDate() - TOLERANCE_DAYS);
@@ -34,7 +56,7 @@ async function isDuplicate(
   const highStr = high.toISOString().slice(0, 10);
 
   const existing = await engineDb
-    .select({ id: externalEvents.id })
+    .select({ payloadJson: externalEvents.payloadJson })
     .from(externalEvents)
     .where(
       and(
@@ -43,21 +65,48 @@ async function isDuplicate(
         gte(externalEvents.eventTs, new Date(lowStr)),
         lte(externalEvents.eventTs, new Date(highStr))
       )
-    )
-    .limit(1);
-  return existing.length > 0;
+    );
+  if (existing.length === 0) {
+    return null;
+  }
+  const newSummary = normalizeSummary(payloadJson);
+  for (const row of existing) {
+    const existingPayload = row.payloadJson as Record<string, unknown> | null;
+    const existingSummary = normalizeSummary(existingPayload);
+    if (isSimilarSummary(newSummary, existingSummary)) {
+      return "similar_payload";
+    }
+  }
+  return "duplicate";
 }
+
+export type DedupeAndStoreOptions = {
+  onSkip?: (
+    domain: string,
+    eventType: string,
+    eventTs: string,
+    reason: string
+  ) => void;
+  onInsert?: (domain: string, eventType: string, eventTs: string) => void;
+};
 
 /**
  * Dedupe and insert rows into external_events. Returns count inserted.
  */
 export async function dedupeAndStore(
-  rows: ExternalEventRow[]
+  rows: ExternalEventRow[],
+  options?: DedupeAndStoreOptions
 ): Promise<number> {
   let inserted = 0;
   for (const row of rows) {
-    const dup = await isDuplicate(row.domain, row.eventType, row.eventTs);
-    if (dup) {
+    const reason = await getSkipReason(
+      row.domain,
+      row.eventType,
+      row.eventTs,
+      row.payloadJson as Record<string, unknown>
+    );
+    if (reason !== null) {
+      options?.onSkip?.(row.domain, row.eventType, row.eventTs, reason);
       continue;
     }
     const eventTsDate = parseDate(row.eventTs);
@@ -71,6 +120,7 @@ export async function dedupeAndStore(
       confidence: row.confidence,
     });
     inserted += 1;
+    options?.onInsert?.(row.domain, row.eventType, row.eventTs);
   }
   return inserted;
 }

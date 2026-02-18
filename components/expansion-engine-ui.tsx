@@ -111,6 +111,8 @@ export function ExpansionEngineUI() {
   const [logFollowTail, setLogFollowTail] = useState(true);
   const [lastLogSeq, setLastLogSeq] = useState(0);
   const logContainerRef = useRef<HTMLDivElement>(null);
+  const lastLogSeqRef = useRef(0);
+  lastLogSeqRef.current = lastLogSeq;
 
   const loadPrompts = useCallback(async () => {
     const res = await fetch("/api/engine/prompts");
@@ -578,45 +580,103 @@ export function ExpansionEngineUI() {
     if (!runId) {
       return;
     }
-    const pollLog = async () => {
-      const res = await fetch(
-        `/api/engine/run/${runId}/log?since=${lastLogSeq}&limit=500`
-      );
-      const data = (await res.json()) as {
-        runId?: string;
-        entries?: Array<{
-          seq: number;
-          ts: string;
-          level: string;
-          domain: string | null;
-          step: string | null;
-          message: string;
-          detail?: Record<string, unknown> | null;
-        }>;
-        hasMore?: boolean;
-      };
-      if (!res.ok || !data.entries?.length) {
-        return;
+    const mergeEntries = (
+      prev: LogEntry[],
+      entries: Array<{
+        seq: number;
+        ts: string;
+        level: string;
+        domain: string | null;
+        step: string | null;
+        message: string;
+        detail?: Record<string, unknown> | null;
+      }>
+    ) => {
+      const bySeq = new Map(prev.map((e) => [e.seq, e]));
+      for (const e of entries) {
+        bySeq.set(e.seq, e);
       }
-      setLogEntries((prev) => {
-        const bySeq = new Map(prev.map((e) => [e.seq, e]));
-        for (const e of data.entries ?? []) {
-          bySeq.set(e.seq, e);
-        }
-        return [...bySeq.entries()]
-          .sort((a, b) => a[0] - b[0])
-          .map(([, e]) => e);
-      });
-      const maxSeq = Math.max(
-        ...(data.entries ?? []).map((e) => e.seq),
-        lastLogSeq
-      );
-      setLastLogSeq(maxSeq);
+      return [...bySeq.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([, e]) => e);
     };
-    const t = setInterval(pollLog, 1500);
-    pollLog();
-    return () => clearInterval(t);
-  }, [runId, lastLogSeq]);
+    const wsUrl =
+      typeof process.env.NEXT_PUBLIC_LOG_WS_URL === "string"
+        ? process.env.NEXT_PUBLIC_LOG_WS_URL.trim()
+        : "";
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    const startPolling = () => {
+      const pollLog = async () => {
+        const since = lastLogSeqRef.current;
+        const res = await fetch(
+          `/api/engine/run/${runId}/log?since=${since}&limit=500`
+        );
+        const data = (await res.json()) as {
+          runId?: string;
+          entries?: LogEntry[];
+          hasMore?: boolean;
+        };
+        if (!res.ok || !data.entries?.length) {
+          return;
+        }
+        setLogEntries((prev) => mergeEntries(prev, data.entries ?? []));
+        const maxSeq = Math.max(
+          ...(data.entries ?? []).map((e) => e.seq),
+          since
+        );
+        setLastLogSeq(maxSeq);
+        lastLogSeqRef.current = maxSeq;
+      };
+      pollInterval = setInterval(pollLog, 1500);
+      void pollLog();
+    };
+    if (wsUrl) {
+      const url = `${wsUrl}${wsUrl.includes("?") ? "&" : "?"}runId=${encodeURIComponent(runId)}`;
+      let ws: WebSocket | null = null;
+      try {
+        ws = new WebSocket(url);
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data as string) as {
+              type?: string;
+              entries?: LogEntry[];
+            };
+            if (data.type === "log" && Array.isArray(data.entries)) {
+              setLogEntries((prev) => mergeEntries(prev, data.entries ?? []));
+              const maxSeq = Math.max(
+                ...(data.entries ?? []).map((e) => e.seq),
+                lastLogSeqRef.current
+              );
+              setLastLogSeq(maxSeq);
+              lastLogSeqRef.current = maxSeq;
+            }
+          } catch {
+            // ignore parse errors
+          }
+        };
+        ws.onclose = () => {
+          startPolling();
+        };
+        ws.onerror = () => {
+          ws?.close();
+        };
+      } catch {
+        startPolling();
+      }
+      return () => {
+        ws?.close();
+        if (pollInterval !== null) {
+          clearInterval(pollInterval);
+        }
+      };
+    }
+    startPolling();
+    return () => {
+      if (pollInterval !== null) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [runId]);
 
   useEffect(() => {
     if (logFollowTail && logContainerRef.current) {

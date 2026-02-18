@@ -74,6 +74,24 @@ async function fetchWithRetry(
   }
 }
 
+const LOGIN_WALL_PATTERNS = [
+  /log\s+in/i,
+  /sign\s+in/i,
+  /access\s+denied/i,
+  /subscribe\s+to\s+read/i,
+  /subscribe\s+to\s+continue/i,
+];
+
+function looksLikeLoginWall(text: string): boolean {
+  const sample = text.slice(0, 8000);
+  for (const re of LOGIN_WALL_PATTERNS) {
+    if (re.test(sample)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Extract visible text from HTML: remove script/style, get text, truncate.
  */
@@ -114,15 +132,17 @@ function extractPublishedDate(html: string): string | null {
   return null;
 }
 
+export type FetchSkipResult = { skip: true; reason: string };
+
 /**
- * Fetch one URL, clean, and return article data. Returns null if fetch failed or PDF/skip.
+ * Fetch one URL, clean, and return article data. Returns FetchedArticle or FetchSkipResult if skipped/failed.
  */
 export async function fetchAndCleanArticle(
   domain: string,
   url: string
-): Promise<FetchedArticle | null> {
+): Promise<FetchedArticle | FetchSkipResult | null> {
   if (isPdfUrl(url)) {
-    return null;
+    return { skip: true, reason: "pdf" };
   }
   const { ok, text, date } = await fetchWithRetry(url, RETRIES);
   if (!ok || !text) {
@@ -130,7 +150,10 @@ export async function fetchAndCleanArticle(
   }
   const articleText = cleanHtmlToText(text);
   if (articleText.length < 100) {
-    return null;
+    return { skip: true, reason: "too_short" };
+  }
+  if (looksLikeLoginWall(articleText)) {
+    return { skip: true, reason: "login_protected" };
   }
   const publishedDate = extractPublishedDate(text) ?? date;
   return {
@@ -141,13 +164,26 @@ export async function fetchAndCleanArticle(
   };
 }
 
+export type ArticleFetchStatus = "stored" | "skipped" | "failed";
+
+export type FetchAndStoreArticlesOptions = {
+  /** Called after each URL attempt with status and optional reason / article length. */
+  onUrlResult?: (
+    url: string,
+    status: ArticleFetchStatus,
+    reason?: string,
+    articleTextLength?: number
+  ) => void;
+};
+
 /**
  * Fetch multiple URLs (up to maxPerDomain), dedupe by URL, store in external_articles_raw.
  */
 export async function fetchAndStoreArticles(
   domain: string,
   urls: string[],
-  maxPerDomain: number
+  maxPerDomain: number,
+  options?: FetchAndStoreArticlesOptions
 ): Promise<FetchedArticle[]> {
   const seen = new Set<string>();
   const results: FetchedArticle[] = [];
@@ -160,15 +196,22 @@ export async function fetchAndStoreArticles(
       continue;
     }
     seen.add(norm);
-    const article = await fetchAndCleanArticle(domain, norm);
-    if (article) {
-      results.push(article);
+    const result = await fetchAndCleanArticle(domain, norm);
+    if (result && !("skip" in result)) {
+      results.push(result);
       await engineDb.insert(externalArticlesRaw).values({
-        domain: article.domain,
-        url: article.url,
-        articleText: article.articleText,
-        publishedDate: article.publishedDate,
+        domain: result.domain,
+        url: result.url,
+        articleText: result.articleText,
+        publishedDate: result.publishedDate,
       });
+      options?.onUrlResult?.(norm, "stored", undefined, result.articleText.length);
+    } else {
+      const reason =
+        result && "skip" in result ? result.reason : "fetch_failed";
+      const status =
+        reason === "login_protected" || reason === "pdf" ? "skipped" : "failed";
+      options?.onUrlResult?.(norm, status, reason);
     }
   }
   return results;

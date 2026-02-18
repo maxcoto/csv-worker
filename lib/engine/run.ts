@@ -109,8 +109,18 @@ export async function startRun(config: RunConfig): Promise<{
     throw new Error("Failed to create run");
   }
 
+  const maxDomainsEnv = process.env.EXTERNAL_EVENTS_MAX_DOMAINS;
+  const maxDomains =
+    maxDomainsEnv !== undefined
+      ? Number.parseInt(maxDomainsEnv, 10)
+      : undefined;
   const enrichmentSummary = await runExternalEventsEnrichment(run.id, domains, {
     eventPromptId: eventPromptId ?? null,
+    ...(typeof maxDomains === "number" &&
+    !Number.isNaN(maxDomains) &&
+    maxDomains > 0
+      ? { maxDomains }
+      : {}),
   });
   const existingConfig = (run.config as Record<string, unknown>) ?? {};
   await engineDb

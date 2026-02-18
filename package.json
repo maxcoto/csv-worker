@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
+    "dev:all": "concurrently --names \"app,log-ws\" --prefix-colors \"cyan,magenta\" \"pnpm dev\" \"pnpm log-ws\"",
     "build": "tsx lib/db/migrate && next build",
     "start": "next start",
     "lint": "ultracite check",
@@ -16,7 +17,9 @@
     "db:check": "drizzle-kit check",
     "db:up": "drizzle-kit up",
     "db:reset": "npx tsx scripts/db-reset.ts",
-    "db:seed": "npx tsx scripts/seed.ts"
+    "db:seed": "npx tsx scripts/seed.ts",
+    "log-ws": "npx tsx scripts/ws-log-server.ts",
+    "verify-enrichment": "npx tsx scripts/verify-enrichment-pipeline.ts"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^3.0.15",
@@ -104,6 +107,7 @@
     "tailwindcss-animate": "^1.0.7",
     "use-stick-to-bottom": "^1.1.1",
     "usehooks-ts": "^3.1.0",
+    "ws": "^8.18.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -123,6 +127,7 @@
     "drizzle-kit": "^0.25.0",
     "postcss": "^8",
     "tailwindcss": "^4.1.13",
+    "concurrently": "^9.1.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3",
     "ultracite": "^7.0.11"
