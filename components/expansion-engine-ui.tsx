@@ -685,11 +685,14 @@ export function ExpansionEngineUI() {
   }, [logFollowTail]);
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-background via-background to-primary/5">
-      <div className="mx-auto max-w-6xl space-y-8 p-6">
+    <div className="min-h-dvh bg-background">
+      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(var(--primary)/0.12),transparent)] dark:bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(var(--primary)/0.15),transparent)]" aria-hidden />
+      <div className="relative mx-auto max-w-6xl space-y-8 p-6">
         <header className="pt-4">
-          <h1 className="bg-primary/90 bg-clip-text text-2xl font-semibold tracking-tight text-transparent dark:bg-primary dark:bg-clip-text dark:text-transparent">
-            Expansion Signal Engine
+          <h1 className="text-2xl font-semibold tracking-tight">
+            <span className="bg-gradient-to-r from-cyan-600 via-teal-500 to-cyan-500 bg-clip-text text-transparent dark:from-cyan-400 dark:via-teal-300 dark:to-cyan-400">
+              Expansion Signal Engine
+            </span>
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">
           Set run options and prompts, upload CSVs and ingest, enrich customers
