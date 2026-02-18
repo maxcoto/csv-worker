@@ -1,5 +1,5 @@
 {
-  "name": "ticha",
+  "name": "expansion-signal-engine",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -15,6 +15,7 @@
     "db:pull": "drizzle-kit pull",
     "db:check": "drizzle-kit check",
     "db:up": "drizzle-kit up",
+    "db:reset": "npx tsx scripts/db-reset.ts",
     "db:seed": "npx tsx scripts/seed.ts"
   },
   "dependencies": {
@@ -49,6 +50,7 @@
     "@xyflow/react": "^12.10.0",
     "ai": "6.0.37",
     "bcrypt-ts": "^5.0.2",
+    "cheerio": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "classnames": "^2.5.1",
     "clsx": "^2.1.1",

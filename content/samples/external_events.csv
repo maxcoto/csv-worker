@@ -1,0 +1,8 @@
+domain,event_type,event_ts,source,source_url,payload_json,confidence
+acme.com,FUNDING_ROUND,2024-11-01T12:00:00Z,news,https://example.com/acme-funding,"{""amount_m": 50}",0.9
+globex.com,EXEC_HIRE_LD,2024-10-15T09:00:00Z,linkedin,,,0.85
+initech.com,PARTNERSHIP,2024-12-01T14:00:00Z,press,https://example.com/initech-partner,,0.75
+umbrellacorp.com,PRODUCT_LAUNCH,2024-11-20T10:00:00Z,blog,,,0.88
+wayne.com,FUNDING_ROUND,2024-09-10T11:00:00Z,news,,,0.92
+stark.com,EXEC_DEPARTURE_LD,2024-10-25T16:00:00Z,linkedin,,,0.8
+oscorp.com,PARTNERSHIP,2024-11-12T08:00:00Z,press,,,0.7

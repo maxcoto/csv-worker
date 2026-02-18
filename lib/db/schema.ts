@@ -1,11 +1,5 @@
 import type { InferSelectModel } from "drizzle-orm";
-import {
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-  varchar,
-} from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 
 // ─── ChatMessage ────────────────────────────────────────────────────
 // History keyed by sessionId (cookie). No user/course/unit.

@@ -8,14 +8,13 @@ export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
   ),
-  title: "Chat",
-  description: "Generic multi-agent chatbot.",
+  title: "Expansion Signal Engine",
+  description: "CSV ingest, enrichment, and LLM evaluation pipeline.",
 };
 
 export const viewport = {
   maximumScale: 1,
 };
-
 
 const LIGHT_THEME_COLOR = "hsl(0 0% 100%)";
 const DARK_THEME_COLOR = "hsl(240deg 10% 3.92%)";
@@ -43,11 +42,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      className="font-mono"
-      lang="es"
-      suppressHydrationWarning
-    >
+    <html className="font-mono" lang="es" suppressHydrationWarning>
       <head>
         <script
           // biome-ignore lint/security/noDangerouslySetInnerHtml: Required for theme color sync

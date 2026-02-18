@@ -38,18 +38,18 @@ export function ChatInput({
 
   return (
     <form
-      ref={formRef}
       className="flex gap-2 border-t border-border bg-background p-4"
       onSubmit={handleSubmit}
+      ref={formRef}
     >
       <Textarea
         aria-label="Message"
         className="min-h-[44px] max-h-[200px] resize-none"
         disabled={isLoading}
+        onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         value={input}
-        onChange={(e) => setInput(e.target.value)}
       />
       <Button
         className="shrink-0"

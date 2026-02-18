@@ -5,7 +5,7 @@ import { listPrompts } from "@/lib/prompts/load-prompts";
  * GET /api/prompts
  * Returns list of available prompts (from content/prompts/*.md).
  */
-export async function GET() {
+export function GET() {
   try {
     const prompts = listPrompts();
     return NextResponse.json({ prompts });

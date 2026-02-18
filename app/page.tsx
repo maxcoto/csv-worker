@@ -1,9 +1,9 @@
-import { ChatInterface } from "@/components/chat-interface";
+import { ExpansionEngineUI } from "@/components/expansion-engine-ui";
 
 /**
- * Root page: generic chatbot with sidebar and chat.
- * Session is tracked via cookie (no magic link).
+ * Root: Expansion Signal Engine — single integrated UI for CSV ingest,
+ * run trigger, process reporting, and results/export.
  */
 export default function RootPage() {
-  return <ChatInterface />;
+  return <ExpansionEngineUI />;
 }

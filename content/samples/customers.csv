@@ -1,0 +1,8 @@
+account_id,account_name,website,domain,arr,renewal_date,segment,status,licensed_seats
+acme-001,Acme Corp,https://acme.com,acme.com,120000,2025-06-15,enterprise,active,500
+globex-002,Globex Corporation,https://globex.com,globex.com,85000,2025-03-20,mid-market,active,320
+initech-003,Initech,https://initech.com,initech.com,45000,2025-09-01,smb,active,180
+umbrella-004,Umbrella Corp,https://umbrellacorp.com,umbrellacorp.com,200000,2025-12-10,enterprise,active,1200
+wayne-005,Wayne Enterprises,https://wayne.com,wayne.com,175000,2025-08-22,enterprise,active,890
+stark-006,Stark Industries,https://stark.com,stark.com,310000,2025-11-05,enterprise,active,2100
+oscorp-007,Oscorp,https://oscorp.com,oscorp.com,62000,2025-04-18,mid-market,active,250

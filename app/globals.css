@@ -52,43 +52,43 @@
   --sidebar: hsl(0 0% 98%);
 }
 
-/* define design tokens (dark mode) */
+/* define design tokens (dark mode) — bubble gum pink & dark purple */
 .dark {
-  --background: hsl(0 0% 0%);
+  --background: hsl(270 30% 8%);
   --matrix-green: hsl(120 100% 50%);
   --matrix-green-rgb: 0, 255, 65;
-  --foreground: hsl(0 0% 100%);
-  --card: hsl(0 0% 0%);
-  --card-foreground: hsl(0 0% 100%);
-  --popover: hsl(0 0% 0%);
-  --popover-foreground: hsl(0 0% 100%);
-  --primary: hsl(0 0% 98%);
-  --primary-foreground: hsl(240 5.9% 10%);
-  --secondary: hsl(240 3.7% 15.9%);
-  --secondary-foreground: hsl(0 0% 98%);
-  --muted: hsl(240 3.7% 15.9%);
-  --muted-foreground: hsl(240 5% 64.9%);
-  --accent: hsl(240 3.7% 15.9%);
-  --accent-foreground: hsl(0 0% 98%);
-  --destructive: hsl(0 62.8% 30.6%);
+  --foreground: hsl(330 25% 95%);
+  --card: hsl(270 28% 11%);
+  --card-foreground: hsl(330 20% 96%);
+  --popover: hsl(270 28% 11%);
+  --popover-foreground: hsl(330 20% 96%);
+  --primary: hsl(330 75% 72%);
+  --primary-foreground: hsl(270 40% 10%);
+  --secondary: hsl(270 25% 18%);
+  --secondary-foreground: hsl(330 30% 92%);
+  --muted: hsl(270 20% 16%);
+  --muted-foreground: hsl(330 15% 62%);
+  --accent: hsl(330 40% 22%);
+  --accent-foreground: hsl(330 60% 92%);
+  --destructive: hsl(0 55% 45%);
   --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(240 3.7% 15.9%);
-  --input: hsl(240 3.7% 15.9%);
-  --ring: hsl(240 4.9% 83.9%);
-  --chart-1: hsl(220 70% 50%);
-  --chart-2: hsl(160 60% 45%);
-  --chart-3: hsl(30 80% 55%);
-  --chart-4: hsl(280 65% 60%);
-  --chart-5: hsl(340 75% 55%);
-  --sidebar-background: hsl(0 0% 0%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
-  --sidebar: hsl(240 5.9% 10%);
+  --border: hsl(270 22% 20%);
+  --input: hsl(270 22% 18%);
+  --ring: hsl(330 70% 65%);
+  --chart-1: hsl(330 85% 65%);
+  --chart-2: hsl(270 55% 60%);
+  --chart-3: hsl(290 60% 65%);
+  --chart-4: hsl(320 70% 70%);
+  --chart-5: hsl(280 55% 68%);
+  --sidebar-background: hsl(270 32% 9%);
+  --sidebar-foreground: hsl(330 20% 90%);
+  --sidebar-primary: hsl(330 75% 72%);
+  --sidebar-primary-foreground: hsl(270 40% 10%);
+  --sidebar-accent: hsl(270 25% 18%);
+  --sidebar-accent-foreground: hsl(330 30% 92%);
+  --sidebar-border: hsl(270 22% 20%);
+  --sidebar-ring: hsl(330 70% 65%);
+  --sidebar: hsl(270 30% 10%);
 }
 
 /* define theme */
@@ -160,7 +160,7 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
+    border-color: var(--border, currentcolor);
   }
 }
 
@@ -205,14 +205,12 @@
   body {
     @apply bg-background text-foreground;
     font-family: "Monaco", "Menlo", "Consolas", "Courier New", monospace;
-    overflow: hidden;
-    max-height: 100dvh;
+    min-height: 100dvh;
     position: relative;
   }
 
   html {
-    overflow: hidden;
-    height: 100dvh;
+    min-height: 100dvh;
   }
 }
 
@@ -408,8 +406,6 @@
   div.user-message-bubble p .katex {
     color: black !important;
     background: rgba(0, 255, 65, 0.8) !important;
-    background-color: rgba(0, 255, 65, 0.8) !important;
-    border-color: rgba(0, 255, 65, 1) !important;
     border: 1px solid rgba(0, 255, 65, 1) !important;
   }
 
@@ -423,14 +419,12 @@
   div.user-message-bubble .katex .katex-html,
   div.user-message-bubble .katex .katex-mathml,
   .user-message-bubble .katex[style*="background"] {
-    background-color: rgba(0, 255, 65, 0.8) !important;
     background: rgba(0, 255, 65, 0.8) !important;
   }
 
   /* Also target the root KaTeX element wrapper */
   .user-message-bubble .katex-display .katex,
   div.user-message-bubble .katex-display .katex {
-    background-color: rgba(0, 255, 65, 0.7) !important;
     background: rgba(0, 255, 65, 0.7) !important;
   }
 

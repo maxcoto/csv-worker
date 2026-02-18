@@ -1,0 +1,15 @@
+domain,month,active_users_30d,licensed_seats,feature_adoption_score
+acme.com,2025-01-01,420,500,0.78
+globex.com,2025-01-01,280,320,0.72
+initech.com,2025-01-01,145,180,0.65
+umbrellacorp.com,2025-01-01,980,1200,0.82
+wayne.com,2025-01-01,720,890,0.79
+stark.com,2025-01-01,1650,2100,0.88
+oscorp.com,2025-01-01,210,250,0.68
+acme.com,2024-12-01,400,500,0.76
+globex.com,2024-12-01,265,320,0.70
+initech.com,2024-12-01,138,180,0.63
+umbrellacorp.com,2024-12-01,950,1200,0.80
+wayne.com,2024-12-01,700,890,0.77
+stark.com,2024-12-01,1600,2100,0.86
+oscorp.com,2024-12-01,198,250,0.66

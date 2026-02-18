@@ -15,3 +15,10 @@ export function getChatModel() {
 export function getFastModel() {
   return gateway.languageModel("openai/gpt-4o-mini");
 }
+
+/**
+ * Default model for expansion evaluation (plan: GPT 5.2, temperature 0).
+ */
+export function getExpansionModel() {
+  return gateway.languageModel("openai/gpt-5.2");
+}
