@@ -6,9 +6,9 @@
  * Usage: pnpm exec tsx scripts/verify-enrichment-pipeline.ts
  */
 
-import { buildSearchQueries } from "../lib/engine/external-events/query-builder";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { buildSearchQueries } from "../lib/engine/external-events/query-builder";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -60,9 +60,14 @@ const callSitePatterns = [
 let lastIndex = -1;
 for (const pattern of callSitePatterns) {
   const idx = runEnrichmentSource.indexOf(pattern);
-  assert(idx > lastIndex, `Pipeline order: expected call ${pattern} after previous step`);
+  assert(
+    idx > lastIndex,
+    `Pipeline order: expected call ${pattern} after previous step`
+  );
   lastIndex = idx;
 }
 
-console.log("OK: Query counts (4 exec_hire, 3 exec_departure, 4 layoff, 3 headcount_growth) verified.");
+console.log(
+  "OK: Query counts (4 exec_hire, 3 exec_departure, 4 layoff, 3 headcount_growth) verified."
+);
 console.log("OK: Pipeline order (Layers 1–5) verified in run-enrichment.ts.");

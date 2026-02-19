@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ExportRow } from "@/lib/engine/export-csv";
+import { humanizeLogEntry } from "@/lib/engine/run-log-formatter";
 
 type PromptOption = {
   id: string;
@@ -39,6 +40,10 @@ type LogEntry = {
 };
 
 const RUN_ID_QUERY = "runId";
+
+const LOG_DISPLAY_DEBUG =
+  typeof process.env.NEXT_PUBLIC_LOG_DISPLAY === "string" &&
+  process.env.NEXT_PUBLIC_LOG_DISPLAY.trim().toLowerCase() === "debug";
 
 export function ExpansionEngineUI() {
   const router = useRouter();
@@ -71,9 +76,9 @@ export function ExpansionEngineUI() {
   const [expandedLogDomain, setExpandedLogDomain] = useState<string | null>(
     null
   );
-  const [rowLogEntries, setRowLogEntries] = useState<
-    Record<string, LogEntry[]>
-  >({});
+  const [logConnectionState, setLogConnectionState] = useState<
+    "live" | "polling" | null
+  >(null);
   const pathname = usePathname();
   const urlRunId = searchParams.get(RUN_ID_QUERY);
   const [runId, setRunId] = useState<string | null>(null);
@@ -315,9 +320,7 @@ export function ExpansionEngineUI() {
   const handleEnrichAll = async () => {
     setError(null);
     const startIndex = Math.max(0, startRow - 1);
-    const domains = customerList
-      .slice(startIndex)
-      .map((c) => c.domain);
+    const domains = customerList.slice(startIndex).map((c) => c.domain);
     const concurrency = Math.max(1, Math.floor(Number(speed)) || 1);
     let index = 0;
     const inFlight = new Set<string>();
@@ -429,28 +432,19 @@ export function ExpansionEngineUI() {
     return () => clearInterval(t);
   }, [enrichingRunIdByDomain, loadCustomers]);
 
-  useEffect(() => {
-    if (!expandedLogDomain) {
-      return;
-    }
-    const runIdForLog =
-      enrichingRunIdByDomain[expandedLogDomain] ??
-      customerList.find((c) => c.domain === expandedLogDomain)
-        ?.last_enrichment_run_id;
-    if (!runIdForLog) {
-      setRowLogEntries((prev) => ({ ...prev, [expandedLogDomain]: [] }));
-      return;
-    }
-    const fetchLog = async () => {
-      const res = await fetch(`/api/engine/run/${runIdForLog}/log?tail=200`);
-      const data = (await res.json()) as { entries?: LogEntry[] };
-      const entries = data.entries ?? [];
-      setRowLogEntries((prev) => ({ ...prev, [expandedLogDomain]: entries }));
-    };
-    fetchLog();
-    const t = setInterval(fetchLog, 2000);
-    return () => clearInterval(t);
-  }, [expandedLogDomain, enrichingRunIdByDomain, customerList]);
+  const activeLogRunId =
+    expandedLogDomain != null
+      ? (enrichingRunIdByDomain[expandedLogDomain] ??
+        customerList.find((c) => c.domain === expandedLogDomain)
+          ?.last_enrichment_run_id ??
+        null)
+      : runId;
+  const activeLogLabel =
+    expandedLogDomain != null
+      ? `Enrichment: ${expandedLogDomain}`
+      : runId != null
+        ? "Evaluation"
+        : null;
 
   const handleEvaluate = async () => {
     setError(null);
@@ -577,9 +571,15 @@ export function ExpansionEngineUI() {
   }, [runId]);
 
   useEffect(() => {
-    if (!runId) {
+    if (!activeLogRunId) {
+      setLogConnectionState(null);
       return;
     }
+    setLogEntries([]);
+    setLastLogSeq(0);
+    lastLogSeqRef.current = 0;
+    setLogConnectionState(null);
+
     const mergeEntries = (
       prev: LogEntry[],
       entries: Array<{
@@ -596,87 +596,71 @@ export function ExpansionEngineUI() {
       for (const e of entries) {
         bySeq.set(e.seq, e);
       }
-      return [...bySeq.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .map(([, e]) => e);
+      return [...bySeq.entries()].sort((a, b) => a[0] - b[0]).map(([, e]) => e);
     };
-    const wsUrl =
-      typeof process.env.NEXT_PUBLIC_LOG_WS_URL === "string"
-        ? process.env.NEXT_PUBLIC_LOG_WS_URL.trim()
-        : "";
-    let pollInterval: ReturnType<typeof setInterval> | null = null;
-    const startPolling = () => {
-      const pollLog = async () => {
-        const since = lastLogSeqRef.current;
-        const res = await fetch(
-          `/api/engine/run/${runId}/log?since=${since}&limit=500`
-        );
-        const data = (await res.json()) as {
-          runId?: string;
-          entries?: LogEntry[];
-          hasMore?: boolean;
-        };
-        if (!res.ok || !data.entries?.length) {
-          return;
-        }
-        setLogEntries((prev) => mergeEntries(prev, data.entries ?? []));
-        const maxSeq = Math.max(
-          ...(data.entries ?? []).map((e) => e.seq),
-          since
-        );
-        setLastLogSeq(maxSeq);
-        lastLogSeqRef.current = maxSeq;
-      };
-      pollInterval = setInterval(pollLog, 1500);
-      void pollLog();
-    };
-    if (wsUrl) {
-      const url = `${wsUrl}${wsUrl.includes("?") ? "&" : "?"}runId=${encodeURIComponent(runId)}`;
-      let ws: WebSocket | null = null;
-      try {
-        ws = new WebSocket(url);
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data as string) as {
-              type?: string;
-              entries?: LogEntry[];
-            };
-            if (data.type === "log" && Array.isArray(data.entries)) {
-              setLogEntries((prev) => mergeEntries(prev, data.entries ?? []));
-              const maxSeq = Math.max(
-                ...(data.entries ?? []).map((e) => e.seq),
-                lastLogSeqRef.current
-              );
-              setLastLogSeq(maxSeq);
-              lastLogSeqRef.current = maxSeq;
-            }
-          } catch {
-            // ignore parse errors
-          }
-        };
-        ws.onclose = () => {
-          startPolling();
-        };
-        ws.onerror = () => {
-          ws?.close();
-        };
-      } catch {
-        startPolling();
+    const wsUrl = (() => {
+      const env =
+        typeof process.env.NEXT_PUBLIC_LOG_WS_URL === "string"
+          ? process.env.NEXT_PUBLIC_LOG_WS_URL.trim()
+          : "";
+      if (env) {
+        return env;
       }
-      return () => {
-        ws?.close();
-        if (pollInterval !== null) {
-          clearInterval(pollInterval);
-        }
-      };
+      if (
+        typeof window !== "undefined" &&
+        window.location?.hostname === "localhost"
+      ) {
+        return "ws://localhost:3001";
+      }
+      return "";
+    })();
+
+    if (!wsUrl) {
+      setLogConnectionState("unavailable");
+      return;
     }
-    startPolling();
+
+    const url = `${wsUrl}${wsUrl.includes("?") ? "&" : "?"}runId=${encodeURIComponent(activeLogRunId)}`;
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(url);
+      ws.onopen = () => {
+        setLogConnectionState("live");
+      };
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data as string) as {
+            type?: string;
+            entries?: LogEntry[];
+          };
+          if (data.type === "log" && Array.isArray(data.entries)) {
+            setLogEntries((prev) => mergeEntries(prev, data.entries ?? []));
+            const maxSeq = Math.max(
+              ...(data.entries ?? []).map((e) => e.seq),
+              lastLogSeqRef.current
+            );
+            setLastLogSeq(maxSeq);
+            lastLogSeqRef.current = maxSeq;
+          }
+        } catch {
+          // ignore parse errors
+        }
+      };
+      ws.onclose = () => {
+        setLogConnectionState("disconnected");
+      };
+      ws.onerror = () => {
+        ws?.close();
+      };
+    } catch {
+      setLogConnectionState("disconnected");
+    }
+
     return () => {
-      if (pollInterval !== null) {
-        clearInterval(pollInterval);
-      }
+      ws?.close();
+      setLogConnectionState(null);
     };
-  }, [runId]);
+  }, [activeLogRunId]);
 
   useEffect(() => {
     if (logFollowTail && logContainerRef.current) {
@@ -686,545 +670,568 @@ export function ExpansionEngineUI() {
 
   return (
     <div className="min-h-dvh bg-background">
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(var(--primary)/0.12),transparent)] dark:bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(var(--primary)/0.15),transparent)]" aria-hidden />
-      <div className="relative mx-auto max-w-6xl space-y-8 p-6">
-        <header className="pt-4">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            <span className="bg-gradient-to-r from-cyan-600 via-teal-500 to-cyan-500 bg-clip-text text-transparent dark:from-cyan-400 dark:via-teal-300 dark:to-cyan-400">
-              Expansion Signal Engine
-            </span>
-          </h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-          Set run options and prompts, upload CSVs and ingest, enrich customers
-          with external events (optional), then run evaluation. Results can be
-          viewed and downloaded as CSV.
-        </p>
-      </header>
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(var(--primary)/0.12),transparent)] dark:bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,hsl(var(--primary)/0.15),transparent)]"
+      />
+      <div className="relative grid h-dvh grid-cols-1 lg:grid-cols-2">
+        <div className="overflow-y-auto p-6">
+          <div className="w-full space-y-8">
+            <header className="pt-2">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                <span className="bg-gradient-to-r from-cyan-600 via-teal-500 to-cyan-500 bg-clip-text text-transparent dark:from-cyan-400 dark:via-teal-300 dark:to-cyan-400">
+                  Expansion Signal Engine
+                </span>
+              </h1>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Set run options and prompts, upload CSVs and ingest, enrich
+                customers with external events (optional), then run evaluation.
+                Results can be viewed and downloaded as CSV.
+              </p>
+            </header>
 
-      <section className="space-y-4 rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
-        <h2 className="text-lg font-medium text-foreground">1. Run configuration</h2>
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="eventPrompt">
-              Event prompt (extraction)
-            </label>
-            <Select
-              onValueChange={(v) => setEventPromptId(v || null)}
-              value={eventPromptId ?? ""}
-            >
-              <SelectTrigger className="w-[220px]" id="eventPrompt">
-                <SelectValue placeholder="Select event prompt" />
-              </SelectTrigger>
-              <SelectContent>
-                {eventPrompts.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name} ({p.version})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="evaluationPrompt">
-              Evaluation prompt
-            </label>
-            <Select
-              onValueChange={(v) => setEvaluationPromptId(v || null)}
-              value={evaluationPromptId ?? ""}
-            >
-              <SelectTrigger className="w-[220px]" id="evaluationPrompt">
-                <SelectValue placeholder="Select evaluation prompt" />
-              </SelectTrigger>
-              <SelectContent>
-                {evaluationPrompts.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name} ({p.version})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </section>
-
-      <section className="space-y-4 rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
-        <h2 className="text-lg font-medium">2. CSV inputs</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="opps">
-              Opportunities CSV
-            </label>
-            <Input
-              accept=".csv"
-              id="opps"
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                if (f) {
-                  setOpportunitiesCsv(await readFile(f));
-                }
-              }}
-              type="file"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="events">
-              External events CSV
-            </label>
-            <Input
-              accept=".csv"
-              id="events"
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                if (f) {
-                  setExternalEventsCsv(await readFile(f));
-                }
-              }}
-              type="file"
-            />
-            <p className="text-muted-foreground text-xs">
-              External events: CSV data is merged with web enrichment during the
-              run.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="customers">
-              Customers CSV
-            </label>
-            <Input
-              accept=".csv"
-              id="customers"
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                if (f) {
-                  setCustomersCsv(await readFile(f));
-                }
-              }}
-              type="file"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="telemetry">
-              Telemetry CSV
-            </label>
-            <Input
-              accept=".csv"
-              id="telemetry"
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                if (f) {
-                  setTelemetryCsv(await readFile(f));
-                }
-              }}
-              type="file"
-            />
-          </div>
-        </div>
-        <Button
-          disabled={loading || !customersCsv.trim()}
-          onClick={handleIngest}
-          type="button"
-        >
-          Upload &amp; Ingest
-        </Button>
-        {ingestStatus && (
-          <p className="text-muted-foreground text-sm">{ingestStatus}</p>
-        )}
-      </section>
-
-      {customerList.length > 0 && (
-        <section className="space-y-4 rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
-          <h2 className="text-lg font-medium">3. Customers &amp; enrichment</h2>
-          <p className="text-muted-foreground text-sm">
-            Enrich each customer with external events (web search + LLM
-            extraction), or run enrichment for all. Each row shows last enriched
-            time and can be expanded to view logs.
-          </p>
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="enrichStartRow">
-                Start row (1-based)
-              </label>
-              <Input
-                id="enrichStartRow"
-                min={1}
-                onChange={(e) =>
-                  setStartRow(
-                    Math.max(1, Number.parseInt(e.target.value, 10) || 1)
-                  )
-                }
-                type="number"
-                value={startRow}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="enrichSpeed">
-                Speed (parallel)
-              </label>
-              <Input
-                id="enrichSpeed"
-                min={1}
-                onChange={(e) =>
-                  setSpeed(
-                    Math.max(1, Number.parseInt(e.target.value, 10) || 1)
-                  )
-                }
-                type="number"
-                value={speed}
-              />
-            </div>
-            <div className="flex items-end pb-2">
-              <Button
-                disabled={
-                  loading || Object.keys(enrichingRunIdByDomain).length > 0
-                }
-                onClick={handleEnrichAll}
-                type="button"
-                variant="secondary"
-              >
-                Enrich all
-              </Button>
-            </div>
-          </div>
-          <div className="overflow-x-auto rounded border">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="p-2">Domain</th>
-                  <th className="p-2">Account</th>
-                  <th className="p-2">Last enriched at</th>
-                  <th className="p-2">Actions</th>
-                  <th className="p-2 w-10">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {customerList.map((c) => {
-                  const isEnriching = Boolean(enrichingRunIdByDomain[c.domain]);
-                  const isExpanded = expandedLogDomain === c.domain;
-                  return (
-                    <tr className="border-b" key={c.domain}>
-                      <td className="p-2 font-mono text-xs">{c.domain}</td>
-                      <td className="p-2">{c.account_name || "—"}</td>
-                      <td className="p-2 text-muted-foreground">
-                        {c.last_enriched_at
-                          ? new Date(c.last_enriched_at).toLocaleString()
-                          : "Never"}
-                      </td>
-                      <td className="p-2">
-                        <Button
-                          disabled={loading || isEnriching}
-                          onClick={() => handleEnrich(c.domain)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          {isEnriching ? "Enriching…" : "Enrich"}
-                        </Button>
-                        <Button
-                          aria-expanded={isExpanded}
-                          className="ml-1"
-                          onClick={() =>
-                            setExpandedLogDomain((prev) =>
-                              prev === c.domain ? null : c.domain
-                            )
-                          }
-                          size="sm"
-                          type="button"
-                          variant="ghost"
-                        >
-                          {isExpanded ? "Hide logs" : "Logs"}
-                        </Button>
-                      </td>
-                      <td className="p-2">
-                        {isEnriching ? (
-                          <span
-                            className="inline-block size-4 animate-spin rounded-full border-2 border-muted border-t-primary"
-                            aria-hidden
-                          />
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {expandedLogDomain
-            ? (() => {
-                const c = customerList.find(
-                  (x) => x.domain === expandedLogDomain
-                );
-                if (!c) {
-                  return null;
-                }
-                const isEnriching = Boolean(enrichingRunIdByDomain[c.domain]);
-                const prog = enrichProgressByDomain[c.domain];
-                const rowLogs = rowLogEntries[c.domain] ?? [];
-                return (
-                  <div
-                    className="rounded border bg-muted/20 p-3"
-                    key={`log-${c.domain}`}
+            <section className="space-y-4 rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
+              <h2 className="text-lg font-medium text-foreground">
+                1. Run configuration
+              </h2>
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="eventPrompt">
+                    Event prompt (extraction)
+                  </label>
+                  <Select
+                    onValueChange={(v) => setEventPromptId(v || null)}
+                    value={eventPromptId ?? ""}
                   >
-                    <p className="mb-2 flex items-center gap-2 text-sm font-medium">
-                      Logs for {c.domain}
-                      {isEnriching && (
-                        <>
-                          <span
-                            className="inline-block size-4 animate-spin rounded-full border-2 border-muted border-t-primary"
-                            aria-hidden
-                          />
-                          {prog?.currentStep
-                            ? ` — ${String(prog.currentStep).replace(/_/g, " ")}${prog.substepLabel ? ` (${prog.substepLabel})` : ""}`
+                    <SelectTrigger className="w-[220px]" id="eventPrompt">
+                      <SelectValue placeholder="Select event prompt" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {eventPrompts.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name} ({p.version})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label
+                    className="text-sm font-medium"
+                    htmlFor="evaluationPrompt"
+                  >
+                    Evaluation prompt
+                  </label>
+                  <Select
+                    onValueChange={(v) => setEvaluationPromptId(v || null)}
+                    value={evaluationPromptId ?? ""}
+                  >
+                    <SelectTrigger className="w-[220px]" id="evaluationPrompt">
+                      <SelectValue placeholder="Select evaluation prompt" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {evaluationPrompts.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name} ({p.version})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-4 rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
+              <h2 className="text-lg font-medium">2. CSV inputs</h2>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="opps">
+                    Opportunities CSV
+                  </label>
+                  <Input
+                    accept=".csv"
+                    id="opps"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        setOpportunitiesCsv(await readFile(f));
+                      }
+                    }}
+                    type="file"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="events">
+                    External events CSV
+                  </label>
+                  <Input
+                    accept=".csv"
+                    id="events"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        setExternalEventsCsv(await readFile(f));
+                      }
+                    }}
+                    type="file"
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    External events: CSV data is merged with web enrichment
+                    during the run.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="customers">
+                    Customers CSV
+                  </label>
+                  <Input
+                    accept=".csv"
+                    id="customers"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        setCustomersCsv(await readFile(f));
+                      }
+                    }}
+                    type="file"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="telemetry">
+                    Telemetry CSV
+                  </label>
+                  <Input
+                    accept=".csv"
+                    id="telemetry"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        setTelemetryCsv(await readFile(f));
+                      }
+                    }}
+                    type="file"
+                  />
+                </div>
+              </div>
+              <Button
+                disabled={loading || !customersCsv.trim()}
+                onClick={handleIngest}
+                type="button"
+              >
+                Upload &amp; Ingest
+              </Button>
+              {ingestStatus && (
+                <p className="text-muted-foreground text-sm">{ingestStatus}</p>
+              )}
+            </section>
+
+            {customerList.length > 0 && (
+              <section className="space-y-4 rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
+                <h2 className="text-lg font-medium">
+                  3. Customers &amp; enrichment
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  Enrich each customer with external events (web search + LLM
+                  extraction), or run enrichment for all. Each row shows last
+                  enriched time and can be expanded to view logs.
+                </p>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="space-y-2">
+                    <label
+                      className="text-sm font-medium"
+                      htmlFor="enrichStartRow"
+                    >
+                      Start row (1-based)
+                    </label>
+                    <Input
+                      id="enrichStartRow"
+                      min={1}
+                      onChange={(e) =>
+                        setStartRow(
+                          Math.max(1, Number.parseInt(e.target.value, 10) || 1)
+                        )
+                      }
+                      type="number"
+                      value={startRow}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      className="text-sm font-medium"
+                      htmlFor="enrichSpeed"
+                    >
+                      Speed (parallel)
+                    </label>
+                    <Input
+                      id="enrichSpeed"
+                      min={1}
+                      onChange={(e) =>
+                        setSpeed(
+                          Math.max(1, Number.parseInt(e.target.value, 10) || 1)
+                        )
+                      }
+                      type="number"
+                      value={speed}
+                    />
+                  </div>
+                  <div className="flex items-end pb-2">
+                    <Button
+                      disabled={
+                        loading ||
+                        Object.keys(enrichingRunIdByDomain).length > 0
+                      }
+                      onClick={handleEnrichAll}
+                      type="button"
+                      variant="secondary"
+                    >
+                      Enrich all
+                    </Button>
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded border">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="p-2">Domain</th>
+                        <th className="p-2">Account</th>
+                        <th className="p-2">Last enriched at</th>
+                        <th className="p-2">Actions</th>
+                        <th className="p-2 w-10">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customerList.map((c) => {
+                        const isEnriching = Boolean(
+                          enrichingRunIdByDomain[c.domain]
+                        );
+                        const isExpanded = expandedLogDomain === c.domain;
+                        return (
+                          <tr className="border-b" key={c.domain}>
+                            <td className="p-2 font-mono text-xs">
+                              {c.domain}
+                            </td>
+                            <td className="p-2">{c.account_name || "—"}</td>
+                            <td className="p-2 text-muted-foreground">
+                              {c.last_enriched_at
+                                ? new Date(c.last_enriched_at).toLocaleString()
+                                : "Never"}
+                            </td>
+                            <td className="p-2">
+                              <Button
+                                disabled={loading || isEnriching}
+                                onClick={() => handleEnrich(c.domain)}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                              >
+                                {isEnriching ? "Enriching…" : "Enrich"}
+                              </Button>
+                              <Button
+                                aria-expanded={isExpanded}
+                                className="ml-1"
+                                onClick={() =>
+                                  setExpandedLogDomain((prev) =>
+                                    prev === c.domain ? null : c.domain
+                                  )
+                                }
+                                size="sm"
+                                type="button"
+                                variant="ghost"
+                              >
+                                {isExpanded ? "Hide logs" : "Logs"}
+                              </Button>
+                            </td>
+                            <td className="p-2">
+                              {isEnriching ? (
+                                <span
+                                  aria-hidden
+                                  className="inline-block size-4 animate-spin rounded-full border-2 border-muted border-t-primary"
+                                />
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {customerList.length > 0 && (
+              <section className="rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
+                <h2 className="text-lg font-medium">4. Evaluation</h2>
+                <p className="text-muted-foreground text-sm">
+                  Run the evaluation pipeline (signals, lift, LLM scoring). You
+                  can run this even if you did not enrich any customers.
+                </p>
+                <Button
+                  disabled={loading}
+                  onClick={handleEvaluate}
+                  type="button"
+                >
+                  Evaluation
+                </Button>
+              </section>
+            )}
+
+            {progress && (
+              <section className="rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
+                <h2 className="text-lg font-medium">Process reporting</h2>
+                <p className="text-muted-foreground text-sm">
+                  {progress.status === "running" ? (
+                    <>
+                      {progress.currentStep && (
+                        <span className="font-medium">
+                          {progress.currentStep.replace(/_/g, " ")}
+                          {progress.currentDomain
+                            ? ` — ${progress.currentDomain}`
                             : null}
-                        </>
+                          {progress.substepLabel
+                            ? ` (${progress.substepLabel})`
+                            : null}
+                        </span>
                       )}
-                    </p>
-                    <div className="max-h-48 overflow-y-auto font-mono text-xs">
-                      {rowLogs.length === 0 ? (
-                        <p className="text-muted-foreground">
-                          No log entries yet.
+                      {!progress.currentStep &&
+                        `Processing customer ${progress.processedCount + 1} of ${progress.totalCustomers}`}
+                    </>
+                  ) : (
+                    `Completed: ${progress.processedCount} of ${progress.totalCustomers}`
+                  )}
+                </p>
+                {runId && progress.status === "running" && (
+                  <Button
+                    className="mt-2"
+                    disabled={resuming}
+                    onClick={handleResumeRun}
+                    type="button"
+                    variant="outline"
+                  >
+                    {resuming ? "Resuming…" : "Resume run"}
+                  </Button>
+                )}
+                {progress.status === "completed" &&
+                  progress.externalEventsSummary !== undefined && (
+                    <div className="mt-2 rounded border bg-muted/30 p-2 text-sm">
+                      <p className="font-medium">External events</p>
+                      <p className="text-muted-foreground">
+                        Domains processed:{" "}
+                        {progress.externalEventsSummary.domainsProcessed}
+                        {progress.externalEventsSummary.domainsSkipped > 0 &&
+                          `. Skipped: ${progress.externalEventsSummary.domainsSkipped}`}
+                        . Articles fetched:{" "}
+                        {progress.externalEventsSummary.articlesFetched}
+                        {progress.externalEventsSummary.articlesFailed > 0 &&
+                          `. Fetch failed: ${progress.externalEventsSummary.articlesFailed}`}
+                        . Events stored:{" "}
+                        {progress.externalEventsSummary.eventsStored}.
+                      </p>
+                      {progress.externalEventsSummary.errors.length > 0 && (
+                        <p className="mt-1 text-destructive">
+                          {progress.externalEventsSummary.errors.join(" ")}
                         </p>
-                      ) : (
-                        <ul className="list-none space-y-0.5">
-                          {rowLogs.map((e) => (
-                            <li
-                              className={
-                                e.level === "error"
-                                  ? "text-destructive"
-                                  : e.level === "warn"
-                                    ? "text-amber-600"
-                                    : ""
-                              }
-                              key={e.seq}
-                            >
-                              <span className="text-muted-foreground">
-                                {e.ts}
-                              </span>{" "}
-                              <span className="font-medium">[{e.level}]</span>
-                              {e.step ? ` ${e.step}` : null} {e.message}
-                              {e.detail ? ` ${JSON.stringify(e.detail)}` : null}
-                            </li>
-                          ))}
-                        </ul>
                       )}
                     </div>
-                  </div>
-                );
-              })()
-            : null}
-        </section>
-      )}
-
-      {customerList.length > 0 && (
-        <section className="rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
-          <h2 className="text-lg font-medium">4. Evaluation</h2>
-          <p className="text-muted-foreground text-sm">
-            Run the evaluation pipeline (signals, lift, LLM scoring). You can
-            run this even if you did not enrich any customers.
-          </p>
-          <Button disabled={loading} onClick={handleEvaluate} type="button">
-            Evaluation
-          </Button>
-        </section>
-      )}
-
-      {progress && (
-        <section className="rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
-          <h2 className="text-lg font-medium">Process reporting</h2>
-          <p className="text-muted-foreground text-sm">
-            {progress.status === "running" ? (
-              <>
-                {progress.currentStep && (
-                  <span className="font-medium">
-                    {progress.currentStep.replace(/_/g, " ")}
-                    {progress.currentDomain
-                      ? ` — ${progress.currentDomain}`
-                      : null}
-                    {progress.substepLabel
-                      ? ` (${progress.substepLabel})`
-                      : null}
-                  </span>
+                  )}
+                {runId && progress.status === "completed" && (
+                  <a
+                    className="mt-2 inline-block text-sm text-primary underline"
+                    download
+                    href={`/api/engine/run/${runId}/export`}
+                  >
+                    Download CSV
+                  </a>
                 )}
-                {!progress.currentStep &&
-                  `Processing customer ${progress.processedCount + 1} of ${progress.totalCustomers}`}
-              </>
-            ) : (
-              `Completed: ${progress.processedCount} of ${progress.totalCustomers}`
+              </section>
             )}
-          </p>
-          {runId && progress.status === "running" && (
-            <Button
-              className="mt-2"
-              disabled={resuming}
-              onClick={handleResumeRun}
-              type="button"
-              variant="outline"
-            >
-              {resuming ? "Resuming…" : "Resume run"}
-            </Button>
-          )}
-          {progress.status === "completed" &&
-            progress.externalEventsSummary !== undefined && (
-              <div className="mt-2 rounded border bg-muted/30 p-2 text-sm">
-                <p className="font-medium">External events</p>
-                <p className="text-muted-foreground">
-                  Domains processed:{" "}
-                  {progress.externalEventsSummary.domainsProcessed}
-                  {progress.externalEventsSummary.domainsSkipped > 0 &&
-                    `. Skipped: ${progress.externalEventsSummary.domainsSkipped}`}
-                  . Articles fetched:{" "}
-                  {progress.externalEventsSummary.articlesFetched}
-                  {progress.externalEventsSummary.articlesFailed > 0 &&
-                    `. Fetch failed: ${progress.externalEventsSummary.articlesFailed}`}
-                  . Events stored: {progress.externalEventsSummary.eventsStored}
-                  .
+
+            {results.length > 0 && (
+              <section className="space-y-4 rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-medium">Results</h2>
+                  {runId ? (
+                    <a
+                      className="text-sm text-primary underline"
+                      download
+                      href={`/api/engine/run/${runId}/export`}
+                    >
+                      Download CSV
+                    </a>
+                  ) : null}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="p-2">Account</th>
+                        <th className="p-2">Domain</th>
+                        <th className="p-2">ARR</th>
+                        <th className="p-2">Expansion</th>
+                        <th className="p-2">Risk</th>
+                        <th className="p-2">Impact</th>
+                        <th className="p-2">Motion</th>
+                        <th className="p-2">DQ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {results.slice(0, 50).map((r, i) => (
+                        <tr className="border-b" key={r.domain + String(i)}>
+                          <td className="p-2">{r.account_name}</td>
+                          <td className="p-2">{r.domain}</td>
+                          <td className="p-2">{r.arr ?? "—"}</td>
+                          <td className="p-2">{r.expansion_score ?? "—"}</td>
+                          <td className="p-2">{r.risk_score ?? "—"}</td>
+                          <td className="p-2">{r.impact_score.toFixed(1)}</td>
+                          <td className="p-2">{r.recommended_motion ?? "—"}</td>
+                          <td className="p-2">{r.data_quality_score ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {results.length > 50 && (
+                  <p className="text-muted-foreground text-sm">
+                    Showing first 50 of {results.length}. Use CSV download for
+                    full list.
+                  </p>
+                )}
+              </section>
+            )}
+
+            {error && (
+              <p className="text-destructive text-sm" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="overflow-hidden border-t border-border/60 p-6 lg:border-t-0 lg:border-l">
+          <section className="flex h-full flex-col rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-medium">Run log</h2>
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  {activeLogLabel != null
+                    ? `${activeLogLabel}${activeLogRunId ? ` · runId=${activeLogRunId}` : ""}`
+                    : "Start an evaluation or click Logs on a customer to see logs."}
                 </p>
-                {progress.externalEventsSummary.errors.length > 0 && (
-                  <p className="mt-1 text-destructive">
-                    {progress.externalEventsSummary.errors.join(" ")}
+                {logConnectionState != null && (
+                  <p
+                    aria-live="polite"
+                    className="text-muted-foreground mt-0.5 text-xs"
+                  >
+                    {logConnectionState === "live"
+                      ? "Live"
+                      : logConnectionState === "disconnected"
+                        ? "Log server disconnected"
+                        : "Log server not configured"}
                   </p>
                 )}
               </div>
-            )}
-          {runId && progress.status === "completed" && (
-            <a
-              className="mt-2 inline-block text-sm text-primary underline"
-              download
-              href={`/api/engine/run/${runId}/export`}
-            >
-              Download CSV
-            </a>
-          )}
-        </section>
-      )}
-
-      {runId && (
-        <section className="rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-lg font-medium">Run log</h2>
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-1 text-sm">
-                <input
-                  checked={logFollowTail}
-                  className="rounded"
-                  onChange={(e) => setLogFollowTail(e.target.checked)}
-                  type="checkbox"
-                />
-                Follow tail
-              </label>
-              <Button
-                onClick={() => {
-                  const text = logEntries
-                    .map(
-                      (e) =>
-                        `${e.ts} [${e.level}] ${e.domain ?? ""} ${e.step ?? ""} ${e.message} ${e.detail ? JSON.stringify(e.detail) : ""}`
-                    )
-                    .join("\n");
-                  navigator.clipboard.writeText(text).catch(() => {
-                    /* clipboard error ignored */
-                  });
-                }}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Copy log
-              </Button>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1 text-sm">
+                  <input
+                    checked={logFollowTail}
+                    className="rounded"
+                    disabled={!activeLogRunId}
+                    onChange={(e) => setLogFollowTail(e.target.checked)}
+                    type="checkbox"
+                  />
+                  Follow tail
+                </label>
+                <Button
+                  disabled={!activeLogRunId || logEntries.length === 0}
+                  onClick={() => {
+                    const text = LOG_DISPLAY_DEBUG
+                      ? logEntries
+                          .map(
+                            (e) =>
+                              `${e.ts} [${e.level}] ${e.domain ?? ""} ${e.step ?? ""} ${e.message}${e.detail ? ` ${JSON.stringify(e.detail)}` : ""}`
+                          )
+                          .join("\n")
+                      : logEntries.map((e) => humanizeLogEntry(e)).join("\n");
+                    navigator.clipboard.writeText(text).catch(() => {
+                      /* clipboard error ignored */
+                    });
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Copy log
+                </Button>
+              </div>
             </div>
-          </div>
-          <div
-            className="max-h-80 overflow-y-auto rounded border bg-muted/20 font-mono text-xs"
-            ref={logContainerRef}
-          >
-            {logEntries.length === 0 ? (
-              <p className="p-2 text-muted-foreground">
-                Log entries will appear as the run progresses.
-              </p>
-            ) : (
-              <ul className="list-none space-y-0.5 p-2">
-                {logEntries.map((e) => (
-                  <li
-                    className={
-                      e.level === "error"
-                        ? "text-destructive"
-                        : e.level === "warn"
-                          ? "text-amber-600"
-                          : ""
-                    }
-                    key={e.seq}
-                  >
-                    <span className="text-muted-foreground">{e.ts}</span>{" "}
-                    <span className="font-medium">[{e.level}]</span>
-                    {e.domain ? ` ${e.domain}` : null}
-                    {e.step ? ` ${e.step}` : null} {e.message}
-                    {e.detail ? ` ${JSON.stringify(e.detail)}` : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-      )}
-
-      {results.length > 0 && (
-        <section className="space-y-4 rounded-xl border border-border/80 bg-card/95 p-5 shadow-sm backdrop-blur-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium">Results</h2>
-            {runId ? (
-              <a
-                className="text-sm text-primary underline"
-                download
-                href={`/api/engine/run/${runId}/export`}
-              >
-                Download CSV
-              </a>
-            ) : null}
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="p-2">Account</th>
-                  <th className="p-2">Domain</th>
-                  <th className="p-2">ARR</th>
-                  <th className="p-2">Expansion</th>
-                  <th className="p-2">Risk</th>
-                  <th className="p-2">Impact</th>
-                  <th className="p-2">Motion</th>
-                  <th className="p-2">DQ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.slice(0, 50).map((r, i) => (
-                  <tr className="border-b" key={r.domain + String(i)}>
-                    <td className="p-2">{r.account_name}</td>
-                    <td className="p-2">{r.domain}</td>
-                    <td className="p-2">{r.arr ?? "—"}</td>
-                    <td className="p-2">{r.expansion_score ?? "—"}</td>
-                    <td className="p-2">{r.risk_score ?? "—"}</td>
-                    <td className="p-2">{r.impact_score.toFixed(1)}</td>
-                    <td className="p-2">{r.recommended_motion ?? "—"}</td>
-                    <td className="p-2">{r.data_quality_score ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {results.length > 50 && (
-            <p className="text-muted-foreground text-sm">
-              Showing first 50 of {results.length}. Use CSV download for full
-              list.
-            </p>
-          )}
-        </section>
-      )}
-
-      {error && (
-        <p className="text-destructive text-sm" role="alert">
-          {error}
-        </p>
-      )}
+            <div
+              className="mt-3 flex-1 overflow-y-auto rounded border bg-muted/20 font-mono text-xs"
+              ref={logContainerRef}
+            >
+              {activeLogRunId ? (
+                logConnectionState === "unavailable" ? (
+                  <p className="p-3 text-muted-foreground">
+                    Run{" "}
+                    <code className="rounded bg-muted px-1">pnpm log-ws</code>{" "}
+                    in another terminal and set{" "}
+                    <code className="rounded bg-muted px-1">
+                      NEXT_PUBLIC_LOG_WS_URL
+                    </code>{" "}
+                    in .env.local to stream run logs.
+                  </p>
+                ) : logEntries.length === 0 ? (
+                  <p className="p-3 text-muted-foreground">
+                    Log entries will appear as the run progresses.
+                  </p>
+                ) : LOG_DISPLAY_DEBUG ? (
+                  <ul className="list-none space-y-0.5 p-3">
+                    {logEntries.map((e) => (
+                      <li
+                        className={
+                          e.level === "error"
+                            ? "text-destructive"
+                            : e.level === "warn"
+                              ? "text-amber-600"
+                              : ""
+                        }
+                        key={e.seq}
+                      >
+                        <span className="text-muted-foreground">{e.ts}</span>{" "}
+                        <span className="font-medium">[{e.level}]</span>
+                        {e.domain ? ` ${e.domain}` : null}
+                        {e.step ? ` ${e.step}` : null} {e.message}
+                        {e.detail ? ` ${JSON.stringify(e.detail)}` : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <ul className="list-none space-y-0.5 p-3">
+                    {logEntries.map((e) => (
+                      <li
+                        className={
+                          e.level === "error"
+                            ? "text-destructive"
+                            : e.level === "warn"
+                              ? "text-amber-600"
+                              : ""
+                        }
+                        key={e.seq}
+                      >
+                        {humanizeLogEntry(e)}
+                      </li>
+                    ))}
+                  </ul>
+                )
+              ) : (
+                <p className="p-3 text-muted-foreground">
+                  Logs will appear here after you start an evaluation run or
+                  click Logs on a customer row.
+                </p>
+              )}
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );

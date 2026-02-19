@@ -438,7 +438,9 @@ export async function resumeRun(
       totalCustomers: run.totalCustomers ?? 0,
       lastProcessedIndex: run.lastProcessedIndex,
     };
-    onProgress?.(`Run already completed: ${result.processedCount}/${result.totalCustomers}`);
+    onProgress?.(
+      `Run already completed: ${result.processedCount}/${result.totalCustomers}`
+    );
     return result;
   }
 
@@ -571,7 +573,9 @@ export async function getRunProgress(
             ? (config.eventPromptId as string | null)
             : undefined,
         promptId:
-          config.promptId != null ? (config.promptId as string | null) : undefined,
+          config.promptId != null
+            ? (config.promptId as string | null)
+            : undefined,
       }
     : null;
   return {

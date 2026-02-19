@@ -29,21 +29,7 @@ pnpm db:migrate
 
 ### 3. Run
 
-**Option A — App only (logs via HTTP polling):**
-
-```bash
-pnpm dev
-```
-
-**Option B — App + log WebSocket server (real-time run logs):**
-
-```bash
-pnpm dev:all
-```
-
-This runs the Next.js app and the log WS server (`pnpm log-ws`) together. Set `NEXT_PUBLIC_LOG_WS_URL=ws://localhost:3001` in `.env.local` so the UI connects to the WS server.
-
-**Option C — Two terminals:**
+Use two terminals. Run logs stream via WebSocket only; set `NEXT_PUBLIC_LOG_WS_URL` in `.env.local` (required).
 
 ```bash
 # Terminal 1
@@ -55,15 +41,7 @@ pnpm log-ws
 
 Open http://localhost:3000.
 
-### Optional: log WebSocket server (real-time run logs)
-
-To stream run logs over WebSocket instead of HTTP polling, start the log server in a separate terminal:
-
-```bash
-pnpm log-ws
-```
-
-Set `NEXT_PUBLIC_LOG_WS_URL=ws://localhost:3001` (or your host/port) so the UI connects to it. If unset, the UI uses HTTP polling.
+For debug mode (raw log format with timestamps and JSON): run `pnpm dev:debug` in Terminal 1 instead of `pnpm dev`.
 
 ## Env vars
 
@@ -73,9 +51,9 @@ Set `NEXT_PUBLIC_LOG_WS_URL=ws://localhost:3001` (or your host/port) so the UI c
 | `AI_GATEWAY_API_KEY` | Vercel AI Gateway API key |
 | `NEXT_PUBLIC_APP_URL` | Public app URL (optional) |
 | `LOG_WS_PORT` | Port for the log WebSocket server (default 3001). Used when running `pnpm log-ws`. |
-| `NEXT_PUBLIC_LOG_WS_URL` | WebSocket URL for run logs (e.g. `ws://localhost:3001`). If set, the UI streams logs over WSS; otherwise it falls back to HTTP polling. |
+| `NEXT_PUBLIC_LOG_WS_URL` | **Required.** WebSocket URL for run logs (e.g. `ws://localhost:3001`). Run `pnpm log-ws` in a separate terminal. |
 | `EXTERNAL_EVENTS_MAX_DOMAINS` | Max domains per run for external events enrichment (default 50). Optional. |
-| `EXTERNAL_EVENTS_SEARCH_PROVIDER` | `newsapi` (default) or `google`. For Google: set `EXTERNAL_EVENTS_GOOGLE_CSE_KEY` and `EXTERNAL_EVENTS_GOOGLE_CSE_CX`. |
+| `EXTERNAL_EVENTS_SEARCH_PROVIDER` | `newsapi` (default) or `google`. For News API: set `EXTERNAL_EVENTS_NEWS_API_KEY` from [newsapi.org](https://newsapi.org) (free tier: 100 requests/day). For Google: set `EXTERNAL_EVENTS_GOOGLE_CSE_KEY` and `EXTERNAL_EVENTS_GOOGLE_CSE_CX`. |
 
 ## Run cadence
 

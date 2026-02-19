@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "dev:all": "concurrently --names \"app,log-ws\" --prefix-colors \"cyan,magenta\" \"pnpm dev\" \"pnpm log-ws\"",
+    "dev:debug": "NEXT_PUBLIC_LOG_DISPLAY=debug next dev --turbo",
     "build": "tsx lib/db/migrate && next build",
     "start": "next start",
     "lint": "ultracite check",

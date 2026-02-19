@@ -7,17 +7,12 @@
  * Usage: pnpm log-ws   (or npx tsx scripts/ws-log-server.ts)
  */
 
-import { config } from "dotenv";
-config({ path: ".env.local", override: false });
-config({ path: ".env", override: false });
+import "./load-env";
 
 import { WebSocketServer } from "ws";
 import { getRunLogEntries } from "../lib/engine/run-log";
 
-const PORT = Number.parseInt(
-  process.env.LOG_WS_PORT ?? "3001",
-  10
-);
+const PORT = Number.parseInt(process.env.LOG_WS_PORT ?? "3001", 10);
 const POLL_MS = 1500;
 
 const wss = new WebSocketServer({ port: PORT });
@@ -30,7 +25,7 @@ type ClientState = {
 wss.on("connection", (ws, req) => {
   const url = req.url ?? "";
   const runId =
-    new URL(url, `http://localhost`).searchParams.get("runId")?.trim() ?? "";
+    new URL(url, "http://localhost").searchParams.get("runId")?.trim() ?? "";
   if (!runId) {
     ws.close(4000, "runId required");
     return;
@@ -47,10 +42,7 @@ wss.on("connection", (ws, req) => {
         limit: 500,
       });
       if (entries.length > 0) {
-        const maxSeq = Math.max(
-          ...entries.map((e) => e.seq),
-          state.lastSeq
-        );
+        const maxSeq = Math.max(...entries.map((e) => e.seq), state.lastSeq);
         state.lastSeq = maxSeq;
         ws.send(
           JSON.stringify({
@@ -91,4 +83,6 @@ wss.on("connection", (ws, req) => {
   });
 });
 
-console.log(`Log WebSocket server listening on port ${PORT}. Connect with ?runId=<runId>`);
+console.log(
+  `Log WebSocket server listening on port ${PORT}. Connect with ?runId=<runId>`
+);

@@ -15,7 +15,8 @@ function parseDate(s: string): Date | null {
 }
 
 function normalizeSummary(payload: Record<string, unknown> | null): string {
-  const s = payload && typeof payload.summary === "string" ? payload.summary : "";
+  const s =
+    payload && typeof payload.summary === "string" ? payload.summary : "";
   return s.toLowerCase().trim();
 }
 
@@ -29,7 +30,8 @@ function isSimilarSummary(
   }
   if (newSummary.length >= 20 && existingSummary.length >= 20) {
     return (
-      newSummary.includes(existingSummary) || existingSummary.includes(newSummary)
+      newSummary.includes(existingSummary) ||
+      existingSummary.includes(newSummary)
     );
   }
   return false;

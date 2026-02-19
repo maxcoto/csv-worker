@@ -205,7 +205,12 @@ export async function fetchAndStoreArticles(
         articleText: result.articleText,
         publishedDate: result.publishedDate,
       });
-      options?.onUrlResult?.(norm, "stored", undefined, result.articleText.length);
+      options?.onUrlResult?.(
+        norm,
+        "stored",
+        undefined,
+        result.articleText.length
+      );
     } else {
       const reason =
         result && "skip" in result ? result.reason : "fetch_failed";

@@ -1,5 +1,3 @@
-import "server-only";
-
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 // Drizzle schema option requires the full schema object; namespace import is intentional.

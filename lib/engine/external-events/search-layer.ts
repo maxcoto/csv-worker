@@ -9,6 +9,8 @@ import type { SearchQuery } from "./query-builder";
 
 const MAX_RESULTS_PER_QUERY = 10;
 const DATE_RANGE_MONTHS = 6;
+/** News API free tier only allows ~1 month lookback. Paid plans allow more. */
+const DATE_RANGE_MONTHS_NEWSAPI = 1;
 const DATE_RANGE_MONTHS_GOOGLE = 12; // 6–12 months; Google uses dateRestrict
 
 export type SearchResultRow = {
@@ -47,7 +49,7 @@ async function searchNewsApi(
   const res = await fetch(url);
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`News API error ${res.status}: ${text.slice(0, 200)}`);
+    throw new Error(`News API error ${res.status}: ${text}`);
   }
   const data = (await res.json()) as {
     articles?: Array<{
@@ -66,10 +68,13 @@ async function searchNewsApi(
     }));
 }
 
-function getDateRange(): { from: string; to: string } {
+function getDateRange(months = DATE_RANGE_MONTHS): {
+  from: string;
+  to: string;
+} {
   const to = new Date();
   const from = new Date();
-  from.setMonth(from.getMonth() - DATE_RANGE_MONTHS);
+  from.setMonth(from.getMonth() - months);
   return {
     from: from.toISOString().slice(0, 10),
     to: to.toISOString().slice(0, 10),
@@ -104,10 +109,7 @@ async function searchGoogleCustomSearch(
       "Google Custom Search requires EXTERNAL_EVENTS_GOOGLE_CSE_KEY and EXTERNAL_EVENTS_GOOGLE_CSE_CX"
     );
   }
-  const months = Math.min(
-    12,
-    Math.max(6, DATE_RANGE_MONTHS_GOOGLE)
-  );
+  const months = Math.min(12, Math.max(6, DATE_RANGE_MONTHS_GOOGLE));
   const dateRestrict = `m${months}`;
   const params = new URLSearchParams({
     key: apiKey,
@@ -120,9 +122,7 @@ async function searchGoogleCustomSearch(
   const res = await fetch(apiUrl);
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(
-      `Google Custom Search error ${res.status}: ${text.slice(0, 200)}`
-    );
+    throw new Error(`Google Custom Search error ${res.status}: ${text}`);
   }
   const data = (await res.json()) as {
     items?: Array<{
@@ -149,7 +149,9 @@ export async function runSearchQuery(
   searchQuery: SearchQuery
 ): Promise<SearchResultRow[]> {
   const provider = process.env.EXTERNAL_EVENTS_SEARCH_PROVIDER ?? "newsapi";
-  const { from, to } = getDateRange();
+  const months =
+    provider === "newsapi" ? DATE_RANGE_MONTHS_NEWSAPI : DATE_RANGE_MONTHS;
+  const { from, to } = getDateRange(months);
 
   if (provider === "newsapi") {
     const articles = await searchNewsApi(searchQuery.query, from, to);

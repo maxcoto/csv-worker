@@ -87,21 +87,16 @@ export async function runExternalEventsEnrichment(
           queries.map((q) => ({ query: q.query, category: q.category })),
           {
             onQueryDone: async (category, query, rows) => {
-              await appendRunLog(
-                runId,
-                "info",
-                `Search query: ${category}`,
-                {
-                  domain,
-                  step: "external_events_search",
-                  detail: {
-                    query,
-                    category,
-                    resultCount: rows.length,
-                    rows,
-                  },
-                }
-              );
+              await appendRunLog(runId, "info", `Search query: ${category}`, {
+                domain,
+                step: "external_events_search",
+                detail: {
+                  query,
+                  category,
+                  resultCount: rows.length,
+                  rows,
+                },
+              });
             },
           }
         );
