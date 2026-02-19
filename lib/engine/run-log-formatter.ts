@@ -139,6 +139,25 @@ export function humanizeLogEntry(entry: RunLogEntryDto): string {
         const total = num(d.totalCustomers);
         return `Starting LLM evaluation for ${total} customer${total === 1 ? "" : "s"}.`;
       }
+      if (message === "LLM evaluation input") {
+        const month = str(d.evaluation_month);
+        const dq = num(d.data_quality_score);
+        const account = str(d.account_name);
+        const signals = num(d.atomic_signals_count);
+        const stats = num(d.historical_signal_stats_count);
+        const chars = num(d.input_char_count);
+        const accountPart = account ? ` (${account})` : "";
+        return `Sending context to LLM${domainPart}${accountPart}: month=${month}, DQ=${dq}, ${signals} signals, ${stats} lift stats, ${chars.toLocaleString()} chars.`;
+      }
+      if (message === "LLM evaluation output") {
+        const exp = num(d.expansion_score);
+        const risk = num(d.risk_score);
+        const motion = str(d.recommended_motion);
+        const evidenceCount = num(d.evidence_used_count);
+        const whyNow = str(d.why_now);
+        const whyPart = whyNow ? ` — ${whyNow}` : "";
+        return `LLM result${domainPart}: expansion=${exp}, risk=${risk}, motion=${motion}, ${evidenceCount} evidence item${evidenceCount === 1 ? "" : "s"}${whyPart}`;
+      }
       if (message.startsWith("Evaluating ")) {
         return `Evaluating ${domain ?? "customer"}.`;
       }

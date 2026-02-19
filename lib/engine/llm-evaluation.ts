@@ -6,6 +6,7 @@ import type { ContextSnapshotJson } from "./context-snapshot";
 import { engineDb } from "./db/client";
 import { llmEvaluations } from "./db/schema";
 import { LIFT_STATS_VERSION } from "./lift-stats";
+import { appendRunLog } from "./run-log";
 
 export const ENGINE_VERSION = "v1.0";
 
@@ -37,6 +38,19 @@ export async function evaluateWithLlm(
   const model = getExpansionModel();
   const userMessage = JSON.stringify(contextJson);
 
+  await appendRunLog(runId, "info", "LLM evaluation input", {
+    domain,
+    step: "llm_eval",
+    detail: {
+      evaluation_month: contextJson.evaluation_context.evaluation_month,
+      data_quality_score: contextJson.evaluation_context.data_quality_score,
+      account_name: contextJson.account_profile.account_name,
+      atomic_signals_count: contextJson.atomic_signals.length,
+      historical_signal_stats_count: contextJson.historical_signal_stats.length,
+      input_char_count: userMessage.length,
+    },
+  });
+
   let rawText: string;
   try {
     const result = await generateText({
@@ -61,6 +75,26 @@ export async function evaluateWithLlm(
   }
 
   const out = validated.data;
+
+  await appendRunLog(runId, "info", "LLM evaluation output", {
+    domain,
+    step: "llm_eval",
+    detail: {
+      expansion_score: out.expansion_score,
+      risk_score: out.risk_score,
+      recommended_motion: out.recommended_motion,
+      evidence_used_count: out.evidence_used.length,
+      why_now:
+        out.why_now.length > 120
+          ? `${out.why_now.slice(0, 117)}...`
+          : out.why_now,
+      reasoning_preview:
+        out.reasoning.length > 80
+          ? `${out.reasoning.slice(0, 77)}...`
+          : out.reasoning,
+    },
+  });
+
   await engineDb.insert(llmEvaluations).values({
     runId,
     domain,
