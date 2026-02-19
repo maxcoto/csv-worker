@@ -480,6 +480,7 @@ export function ExpansionEngineUI() {
       }
       const newRunId = data.runId ?? null;
       setRunId(newRunId);
+      setExpandedLogDomain(null);
       if (newRunId) {
         router.replace(
           `${pathname}?${RUN_ID_QUERY}=${encodeURIComponent(newRunId)}`,
@@ -841,7 +842,7 @@ export function ExpansionEngineUI() {
                   extraction), or run enrichment for all. Each row shows last
                   enriched time and can be expanded to view logs.
                 </p>
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-end gap-4">
                   <div className="space-y-2">
                     <label
                       className="text-sm font-medium"
@@ -880,7 +881,7 @@ export function ExpansionEngineUI() {
                       value={speed}
                     />
                   </div>
-                  <div className="flex items-end pb-2">
+                  <div>
                     <Button
                       disabled={
                         loading ||
@@ -888,7 +889,6 @@ export function ExpansionEngineUI() {
                       }
                       onClick={handleEnrichAll}
                       type="button"
-                      variant="secondary"
                     >
                       Enrich all
                     </Button>
@@ -928,7 +928,6 @@ export function ExpansionEngineUI() {
                                 onClick={() => handleEnrich(c.domain)}
                                 size="sm"
                                 type="button"
-                                variant="outline"
                               >
                                 {isEnriching ? "Enriching…" : "Enrich"}
                               </Button>
@@ -942,7 +941,7 @@ export function ExpansionEngineUI() {
                                 }
                                 size="sm"
                                 type="button"
-                                variant="ghost"
+                                variant="link"
                               >
                                 {isExpanded ? "Hide logs" : "Logs"}
                               </Button>
@@ -1013,7 +1012,6 @@ export function ExpansionEngineUI() {
                     disabled={resuming}
                     onClick={handleResumeRun}
                     type="button"
-                    variant="outline"
                   >
                     {resuming ? "Resuming…" : "Resume run"}
                   </Button>
@@ -1043,7 +1041,7 @@ export function ExpansionEngineUI() {
                   )}
                 {runId && progress.status === "completed" && (
                   <a
-                    className="mt-2 inline-block text-sm text-primary underline"
+                    className="text-primary mt-2 inline-block cursor-pointer text-sm underline underline-offset-4 hover:text-primary/90"
                     download
                     href={`/api/engine/run/${runId}/export`}
                   >
@@ -1059,7 +1057,7 @@ export function ExpansionEngineUI() {
                   <h2 className="text-lg font-medium">Results</h2>
                   {runId ? (
                     <a
-                      className="text-sm text-primary underline"
+                      className="text-primary cursor-pointer text-sm underline underline-offset-4 hover:text-primary/90"
                       download
                       href={`/api/engine/run/${runId}/export`}
                     >

@@ -1,8 +1,8 @@
 account_id,opportunity_id,type,stage,created_date,close_date,amount
-acme-001,opp-acme-1,new_business,negotiation,2024-10-01,2025-01-15,25000
-globex-002,opp-globex-1,expansion,proposal,2024-11-10,2025-02-28,15000
-initech-003,opp-initech-1,new_business,discovery,2024-12-05,,8000
-umbrella-004,opp-umbrella-1,renewal,closed_won,2024-09-20,2024-12-01,45000
-wayne-005,opp-wayne-1,expansion,qualification,2024-11-15,,32000
-stark-006,opp-stark-1,new_business,closed_won,2024-08-01,2024-10-15,78000
-oscorp-007,opp-oscorp-1,renewal,negotiation,2024-10-20,2025-03-10,12000
+openzeppelin-001,opp-openzeppelin-1,new_business,negotiation,2024-10-01,2025-01-15,25000
+aave-002,opp-aave-1,expansion,proposal,2024-11-10,2025-02-28,18000
+zeropath-003,opp-zeropath-1,new_business,discovery,2024-12-05,,8000
+zealynx-004,opp-zealynx-1,renewal,closed_won,2024-09-20,2024-12-01,12000
+cryptocom-005,opp-cryptocom-1,expansion,qualification,2024-11-15,,45000
+kraken-006,opp-kraken-1,new_business,closed_won,2024-08-01,2024-10-15,62000
+binance-007,opp-binance-1,renewal,negotiation,2024-10-20,2025-03-10,95000
