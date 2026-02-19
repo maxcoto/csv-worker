@@ -1,8 +1,11 @@
 import { eq } from "drizzle-orm";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { engineDb } from "@/lib/engine/db/client";
 import { customers } from "@/lib/engine/db/schema";
-import { startEnrichmentOnlyRun } from "@/lib/engine/run";
+import {
+  createEnrichmentRun,
+  runEnrichmentInBackground,
+} from "@/lib/engine/run";
 
 export const maxDuration = 300;
 
@@ -31,7 +34,8 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
-    const { runId } = await startEnrichmentOnlyRun(domain, eventPromptId);
+    const { runId } = await createEnrichmentRun(domain, eventPromptId);
+    after(() => runEnrichmentInBackground(runId, domain, eventPromptId));
     return NextResponse.json({ runId, ok: true });
   } catch (error) {
     return NextResponse.json(

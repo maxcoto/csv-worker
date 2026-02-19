@@ -156,8 +156,8 @@ export async function startRun(config: RunConfig): Promise<{
   };
 }
 
-/** Enrichment-only run for a single domain. Creates run, runs external events enrichment, updates customer last_enriched_at, returns runId. */
-export async function startEnrichmentOnlyRun(
+/** Creates an enrichment run record only. Does not run enrichment. Returns runId for streaming. */
+export async function createEnrichmentRun(
   domain: string,
   eventPromptId: string | null
 ): Promise<{ runId: string }> {
@@ -185,38 +185,80 @@ export async function startEnrichmentOnlyRun(
   if (!run) {
     throw new Error("Failed to create enrichment run");
   }
-  const summary = await runExternalEventsEnrichment(run.id, [domain], {
-    eventPromptId: eventPromptId ?? null,
-  });
-  const existingConfig = (run.config as Record<string, unknown>) ?? {};
-  await engineDb
-    .update(runs)
-    .set({
-      config: {
-        ...existingConfig,
-        external_events_domains_processed: summary.domainsProcessed,
-        external_events_domains_skipped: summary.domainsSkipped,
-        external_events_articles_fetched: summary.articlesFetched,
-        external_events_articles_failed: summary.articlesFailed,
-        external_events_events_stored: summary.eventsStored,
-        external_events_errors: summary.errors,
-      } as unknown as Record<string, unknown>,
-      status: "completed",
-      currentStep: null,
-      currentDomain: null,
-      substepLabel: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(runs.id, run.id));
-  const now = new Date();
-  await engineDb
-    .update(customers)
-    .set({
-      lastEnrichedAt: now,
-      lastEnrichmentRunId: run.id,
-    })
-    .where(eq(customers.domain, domain));
   return { runId: run.id };
+}
+
+/** Runs enrichment in background. Updates run status and customer on completion. Call via after(). */
+export async function runEnrichmentInBackground(
+  runId: string,
+  domain: string,
+  eventPromptId: string | null
+): Promise<void> {
+  try {
+    const summary = await runExternalEventsEnrichment(runId, [domain], {
+      eventPromptId: eventPromptId ?? null,
+    });
+    const [run] = await engineDb
+      .select({ config: runs.config })
+      .from(runs)
+      .where(eq(runs.id, runId))
+      .limit(1);
+    const existingConfig = (run?.config as Record<string, unknown>) ?? {};
+    await engineDb
+      .update(runs)
+      .set({
+        config: {
+          ...existingConfig,
+          external_events_domains_processed: summary.domainsProcessed,
+          external_events_domains_skipped: summary.domainsSkipped,
+          external_events_articles_fetched: summary.articlesFetched,
+          external_events_articles_failed: summary.articlesFailed,
+          external_events_events_stored: summary.eventsStored,
+          external_events_errors: summary.errors,
+        } as unknown as Record<string, unknown>,
+        status: "completed",
+        currentStep: null,
+        currentDomain: null,
+        substepLabel: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(runs.id, runId));
+    const now = new Date();
+    await engineDb
+      .update(customers)
+      .set({
+        lastEnrichedAt: now,
+        lastEnrichmentRunId: runId,
+      })
+      .where(eq(customers.domain, domain));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await appendRunLog(runId, "error", `Enrichment failed: ${msg}`, {
+      domain,
+      step: "external_events",
+      detail: { error: msg },
+    });
+    await engineDb
+      .update(runs)
+      .set({
+        status: "failed",
+        currentStep: null,
+        currentDomain: null,
+        substepLabel: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(runs.id, runId));
+  }
+}
+
+/** Enrichment-only run for a single domain. Blocks until completion. For background flow, use createEnrichmentRun + runEnrichmentInBackground. */
+export async function startEnrichmentOnlyRun(
+  domain: string,
+  eventPromptId: string | null
+): Promise<{ runId: string }> {
+  const { runId } = await createEnrichmentRun(domain, eventPromptId);
+  await runEnrichmentInBackground(runId, domain, eventPromptId);
+  return { runId };
 }
 
 /** Evaluation-only run: no enrichment. Creates run, computes signals and lift, returns runId. Call processRun(runId) to run LLM loop. */

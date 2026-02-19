@@ -67,6 +67,9 @@ export function ExpansionEngineUI() {
   const [enrichingRunIdByDomain, setEnrichingRunIdByDomain] = useState<
     Record<string, string>
   >({});
+  const [enrichPendingByDomain, setEnrichPendingByDomain] = useState<
+    Record<string, boolean>
+  >({});
   const [enrichProgressByDomain, setEnrichProgressByDomain] = useState<
     Record<
       string,
@@ -77,7 +80,7 @@ export function ExpansionEngineUI() {
     null
   );
   const [logConnectionState, setLogConnectionState] = useState<
-    "live" | "polling" | null
+    "live" | "disconnected" | "unavailable" | null
   >(null);
   const pathname = usePathname();
   const urlRunId = searchParams.get(RUN_ID_QUERY);
@@ -281,7 +284,7 @@ export function ExpansionEngineUI() {
 
   const handleEnrich = async (domain: string) => {
     setError(null);
-    setLoading(true);
+    setEnrichPendingByDomain((prev) => ({ ...prev, [domain]: true }));
     try {
       const res = await fetch("/api/engine/enrich", {
         method: "POST",
@@ -309,11 +312,12 @@ export function ExpansionEngineUI() {
             substepLabel: null,
           },
         }));
+        setExpandedLogDomain(domain);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Enrichment failed");
     } finally {
-      setLoading(false);
+      setEnrichPendingByDomain((prev) => ({ ...prev, [domain]: false }));
     }
   };
 
@@ -335,6 +339,7 @@ export function ExpansionEngineUI() {
         return;
       }
       inFlight.add(domain);
+      setEnrichPendingByDomain((prev) => ({ ...prev, [domain]: true }));
       try {
         const res = await fetch("/api/engine/enrich", {
           method: "POST",
@@ -383,6 +388,7 @@ export function ExpansionEngineUI() {
           await loadCustomers();
         }
       } finally {
+        setEnrichPendingByDomain((prev) => ({ ...prev, [domain]: false }));
         inFlight.delete(domain);
         if (index < domains.length || inFlight.size > 0) {
           await runNext();
@@ -901,9 +907,9 @@ export function ExpansionEngineUI() {
                     </thead>
                     <tbody>
                       {customerList.map((c) => {
-                        const isEnriching = Boolean(
-                          enrichingRunIdByDomain[c.domain]
-                        );
+                        const isEnriching =
+                          Boolean(enrichingRunIdByDomain[c.domain]) ||
+                          Boolean(enrichPendingByDomain[c.domain]);
                         const isExpanded = expandedLogDomain === c.domain;
                         return (
                           <tr className="border-b" key={c.domain}>
@@ -1152,7 +1158,11 @@ export function ExpansionEngineUI() {
                               `${e.ts} [${e.level}] ${e.domain ?? ""} ${e.step ?? ""} ${e.message}${e.detail ? ` ${JSON.stringify(e.detail)}` : ""}`
                           )
                           .join("\n")
-                      : logEntries.map((e) => humanizeLogEntry(e)).join("\n");
+                      : logEntries
+                        .map((e) =>
+                          humanizeLogEntry({ ...e, detail: e.detail ?? null })
+                        )
+                        .join("\n");
                     navigator.clipboard.writeText(text).catch(() => {
                       /* clipboard error ignored */
                     });
@@ -1218,7 +1228,7 @@ export function ExpansionEngineUI() {
                         }
                         key={e.seq}
                       >
-                        {humanizeLogEntry(e)}
+                        {humanizeLogEntry({ ...e, detail: e.detail ?? null })}
                       </li>
                     ))}
                   </ul>
